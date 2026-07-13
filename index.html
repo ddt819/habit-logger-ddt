@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<!--
+════════════════════════════════════════════════════════════
+  HABIT LOGGER — status as of 2026-07-14
+════════════════════════════════════════════════════════════
+
+WHAT THIS IS
+A phone-friendly tap-to-log form (this HTML file). Saves to a
+Google Sheet via a Google Apps Script web app acting as the
+backend. Sheet has stats/trajectory built in; Obsidian doesn't
+need to touch the Sheet directly — it's just the data store.
+
+LIVE PIECES
+Sheet ID:        1wsxR30Z7pFAZInCtTfqzN3WQ7c4aYJOONf7AM_2WQdg
+Sheet URL:       https://docs.google.com/spreadsheets/d/1wsxR30Z7pFAZInCtTfqzN3WQ7c4aYJOONf7AM_2WQdg/edit
+Deployed exec:   https://script.google.com/macros/s/AKfycbydjK9gO8GvYncyzSHBIbgqTUcK-uzsxwWiiZdPL-1ykNZaVBezDQxY2lr_79J77B2nhw/exec
+  (this URL is also hardcoded below as SCRIPT_URL — the two
+  must always match; redeploying the script does NOT change
+  the URL, but editing code requires Deploy → Manage
+  deployments → pencil → New version → Deploy for the live
+  URL to pick up the change)
+
+SHEET STRUCTURE (4 tabs, built by Apps Script — see full code
+at the bottom of this comment)
+  • Plan       — one row per habit: Habit/Category/Type/Target/
+                 Unit/Direction. Editing Target here is the
+                 source of truth; Log's target row reads from
+                 it live via formula.
+  • Log        — one row per day (row 1 = headers, row 2 =
+                 live target formulas, row 3+ = 90 pre-filled
+                 dates going forward from setup day). Booleans
+                 stored as ✔/✘. Conditional formatting colours
+                 metric cells green/yellow/red vs target
+                 (direction-aware) and highlights today's row.
+                 Wake-up/Bedtime columns are intentionally left
+                 uncoloured (time comparison wasn't worth the
+                 complexity).
+  • Trajectory — streak (consecutive hits), 30-day and 90-day
+                 averages (or % completion for booleans), and
+                 a trend arrow (↗/↘/→) per habit. Two line
+                 charts (Steps, Day rating). Recalculated by
+                 refreshTrajectory(), called automatically at
+                 the end of every doPost save.
+  • README     — plain-English explanation of the above, lives
+                 in the Sheet itself for future-Drew.
+
+HOW A SAVE WORKS
+Every toggle tap, rating tap, or number/time field blur fires
+saveField(key, value) immediately — a POST with just Date +
+that one key, so nothing else on the row gets touched (backend
+already skips undefined/empty keys, this just leans on that).
+The big "Save to Sheets" button at the bottom is a fallback for
+saving everything currently filled in at once. doPost() matches
+today's row in Log by real Date comparison, translates app keys
+to pretty column labels via KEY_MAP, converts TRUE/FALSE to
+✔/✘, writes the cells, then calls refreshTrajectory(). If the
+date falls outside the 90 pre-filled rows, it appends a new row
+instead.
+
+SECURITY
+The Apps Script is deployed "Anyone can access" (required for a
+no-login phone app), which makes the exec URL itself a de facto
+credential — anyone with the URL could write garbage or read
+targets. Mitigated with a shared secret: every request must
+include the correct `secret` field/param or doPost/doGet reject
+it. Secret lives as APP_SECRET in the HTML JS and SECRET in the
+Apps Script — keep them in sync if it's ever rotated.
+
+CLAUDE CAN LOG FOR YOU TOO
+Since SCRIPT_URL is just a plain HTTP POST endpoint, Claude can
+hit it directly (curl or WebFetch) when told something in chat,
+e.g. "log workout done" — same payload shape as saveField()
+above: { Date, secret, <key>: value }.
+
+KNOWN GAP / NOT YET BUILT
+The app does not yet fetch targets live from the Sheet on load
+— doGet(?targets=1&secret=...) exists and returns current Plan
+targets as JSON for this purpose, but the HTML's JS hasn't been
+wired up to call it. Target chips currently come from
+localStorage / hardcoded defaults only.
+
+GOTCHA LEARNED THE HARD WAY
+Apps Script pasted via copy from a chat bubble kept throwing
+"Invalid or unexpected token" — traced to backtick template
+literals getting corrupted in transit. The script below
+deliberately avoids backticks entirely (plain string
+concatenation instead) to route around this. If editing this
+script in future, avoid reintroducing template literals if
+the code will ever be copy-pasted through a chat UI again.
+
+════════════════════════════════════════════════════════════
+FULL APPS SCRIPT (paste entire thing into script.google.com,
+replacing everything — Sheet → Extensions → Apps Script)
+════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════
+// HABIT LOGGER — Apps Script (full rebuild, 2026-07-14)
+// Replace ALL existing code in the script editor with this.
+// After pasting: select "setupSheets" from the function dropdown
+// at the top, click Run, authorize if asked. Run it ONCE.
+// ════════════════════════════════════════════════════════════
+
+const SHEET_ID = '1wsxR30Z7pFAZInCtTfqzN3WQ7c4aYJOONf7AM_2WQdg';
+const SECRET = '4e78845d45f9634d2afdcd68da36c64f';
+
+// Order matters — this defines column order in Log + row order in Plan.
+// [ pretty label, category, type, target, unit, direction ]
+const HABITS = [
+  ['Wake-up',        'Health',   'time',    '04:30', 'hh:mm', 'lower'],
+  ['Sleep (hrs)',    'Health',   'metric',  '6.5',   'hrs',   'higher'],
+  ['Steps',          'Health',   'metric',  '10000', 'steps', 'higher'],
+  ['Workout',        'Health',   'boolean', 'daily', 'done',  'higher'],
+  ['Calories (kcal)','Health',   'metric',  '1550',  'kcal',  'lower'],
+  ['Water (L)',      'Health',   'metric',  '5',     'L',     'higher'],
+  ['Supplements',    'Health',   'boolean', 'daily', 'done',  'higher'],
+  ['Bedtime',        'Health',   'time',    '21:30', 'hh:mm', 'lower'],
+  ['Morning pages (min)', 'Creative', 'metric', '30', 'min',  'higher'],
+  ['Writing (min)',  'Creative', 'metric',  '60',    'min',   'higher'],
+  ['Reading (min)',  'Creative', 'metric',  '90',    'min',   'higher'],
+  ['Audiobooks (min)','Creative','metric',  '30',    'min',   'higher'],
+  ['eBay listings',  'Work',     'metric',  '40',    'count', 'higher'],
+  ['Skincare AM',    'Daily',    'boolean', 'daily', 'done',  'higher'],
+  ['Skincare PM',    'Daily',    'boolean', 'daily', 'done',  'higher'],
+  ['Day rating',     'Daily',    'metric',  '7',     '/10',   'higher'],
+];
+
+// Maps the phone app's field keys -> pretty Log column labels above.
+const KEY_MAP = {
+  'wake-time':     'Wake-up',
+  'sleep-hours':   'Sleep (hrs)',
+  'steps':         'Steps',
+  'workout':       'Workout',
+  'calories':      'Calories (kcal)',
+  'water':         'Water (L)',
+  'supplements':   'Supplements',
+  'bedtime':       'Bedtime',
+  'morning-pages': 'Morning pages (min)',
+  'writing':       'Writing (min)',
+  'reading':       'Reading (min)',
+  'audiobooks':    'Audiobooks (min)',
+  'ebay-listings': 'eBay listings',
+  'skincare-am':   'Skincare AM',
+  'skincare-pm':   'Skincare PM',
+  'day-rating':    'Day rating',
+};
+
+const DAYS_TO_PREFILL = 90;
+const LOG_DATA_START_ROW = 3; // row 1 = headers, row 2 = target row, row 3+ = data
+const TIME_LABELS = ['Wake-up', 'Bedtime']; // left uncoloured, see chat
+
+function setupSheets() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const tz = Session.getScriptTimeZone();
+
+  // ---------- PLAN ----------
+  let plan = ss.getSheetByName('Plan') || ss.insertSheet('Plan');
+  plan.clear();
+  plan.getRange(1, 1, 1, 6).setValues([['Habit', 'Category', 'Type', 'Target', 'Unit', 'Direction']])
+    .setFontWeight('bold').setBackground('#efefef');
+  plan.getRange(2, 1, HABITS.length, 6).setValues(HABITS);
+  plan.setFrozenRows(1);
+  plan.autoResizeColumns(1, 6);
+
+  // ---------- LOG ----------
+  let log = ss.getSheetByName('Log') || ss.insertSheet('Log');
+  log.clear();
+  const logHeaders = ['Date', ...HABITS.map(h => h[0])];
+  log.getRange(1, 1, 1, logHeaders.length).setValues([logHeaders])
+    .setFontWeight('bold').setBackground('#efefef');
+
+  // Target row (row 2) — live-linked to Plan so editing Plan updates this automatically
+  const targetFormulas = ['Target →', ...HABITS.map((h, i) => '=Plan!D' + (i + 2))];
+  log.getRange(2, 1, 1, logHeaders.length).setValues([targetFormulas])
+    .setFontStyle('italic').setFontColor('#888888');
+
+  log.setFrozenRows(2);
+  log.setFrozenColumns(1);
+
+  // Pre-fill dates as real Date objects (formatted for display) so doPost can match reliably
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const rows = [];
+  for (let i = 0; i < DAYS_TO_PREFILL; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    rows.push([d, ...Array(HABITS.length).fill('')]);
+  }
+  log.getRange(LOG_DATA_START_ROW, 1, rows.length, logHeaders.length).setValues(rows);
+  log.getRange(LOG_DATA_START_ROW, 1, rows.length, 1).setNumberFormat('ddd d mmm');
+  log.autoResizeColumns(1, logHeaders.length);
+
+  // Conditional formatting — boolean columns (✔/✘) and metric columns (green/yellow/red vs target)
+  const rules = [];
+  HABITS.forEach((h, idx) => {
+    const col = idx + 2; // Date is col 1
+    const colLetter = columnToLetter(col);
+    const range = log.getRange(LOG_DATA_START_ROW, col, rows.length, 1);
+    const label = h[0];
+    const type = h[2];
+    const direction = h[5];
+
+    if (TIME_LABELS.includes(label)) return; // deliberately left uncoloured
+
+    if (type === 'boolean') {
+      rules.push(SpreadsheetApp.newConditionalFormatRule()
+        .whenTextEqualTo('✔').setBackground('#d9ead3').setRanges([range]).build());
+      rules.push(SpreadsheetApp.newConditionalFormatRule()
+        .whenTextEqualTo('✘').setBackground('#f4cccc').setRanges([range]).build());
+    } else if (type === 'metric') {
+      const target = colLetter + '$2';
+      const cell = colLetter + LOG_DATA_START_ROW;
+      if (direction === 'higher') {
+        rules.push(SpreadsheetApp.newConditionalFormatRule()
+          .whenFormulaSatisfied('=AND(' + cell + '<>"",' + cell + '>=' + target + ')')
+          .setBackground('#d9ead3').setRanges([range]).build());
+        rules.push(SpreadsheetApp.newConditionalFormatRule()
+          .whenFormulaSatisfied('=AND(' + cell + '<>"",' + cell + '>=' + target + '*0.8,' + cell + '<' + target + ')')
+          .setBackground('#fff2cc').setRanges([range]).build());
+        rules.push(SpreadsheetApp.newConditionalFormatRule()
+          .whenFormulaSatisfied('=AND(' + cell + '<>"",' + cell + '<' + target + '*0.8)')
+          .setBackground('#f4cccc').setRanges([range]).build());
+      } else { // lower is better
+        rules.push(SpreadsheetApp.newConditionalFormatRule()
+          .whenFormulaSatisfied('=AND(' + cell + '<>"",' + cell + '<=' + target + ')')
+          .setBackground('#d9ead3').setRanges([range]).build());
+        rules.push(SpreadsheetApp.newConditionalFormatRule()
+          .whenFormulaSatisfied('=AND(' + cell + '<>"",' + cell + '<=' + target + '*1.2,' + cell + '>' + target + ')')
+          .setBackground('#fff2cc').setRanges([range]).build());
+        rules.push(SpreadsheetApp.newConditionalFormatRule()
+          .whenFormulaSatisfied('=AND(' + cell + '<>"",' + cell + '>' + target + '*1.2)')
+          .setBackground('#f4cccc').setRanges([range]).build());
+      }
+    }
+  });
+  log.setConditionalFormatRules(rules);
+
+  // Highlight today's row on the date column
+  const todayRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied('=$A3=DATE(' + today.getFullYear() + ',' + (today.getMonth() + 1) + ',' + today.getDate() + ')')
+    .setBackground('#fff59d')
+    .setRanges([log.getRange(LOG_DATA_START_ROW, 1, rows.length, 1)])
+    .build();
+  log.setConditionalFormatRules([...log.getConditionalFormatRules(), todayRule]);
+
+  // ---------- TRAJECTORY ----------
+  let traj = ss.getSheetByName('Trajectory') || ss.insertSheet('Trajectory');
+  traj.clear();
+  traj.getRange(1, 1, 1, 6).setValues([['Habit', 'Type', 'Streak', '30-day', '90-day', 'Trend']])
+    .setFontWeight('bold').setBackground('#efefef');
+  traj.getRange(2, 1, HABITS.length, 2).setValues(HABITS.map(h => [h[0], h[2]]));
+  traj.setFrozenRows(1);
+  traj.autoResizeColumns(1, 6);
+
+  // Two simple charts, anchored below the trend table
+  const stepsCol = HABITS.findIndex(h => h[0] === 'Steps') + 2;
+  const stepsChart = log.newChart()
+    .setChartType(Charts.ChartType.LINE)
+    .addRange(log.getRange(LOG_DATA_START_ROW, 1, DAYS_TO_PREFILL, 1))
+    .addRange(log.getRange(LOG_DATA_START_ROW, stepsCol, DAYS_TO_PREFILL, 1))
+    .setOption('title', 'Steps over time')
+    .setPosition(HABITS.length + 4, 1, 0, 0)
+    .build();
+  traj.insertChart(stepsChart);
+
+  const ratingCol = HABITS.findIndex(h => h[0] === 'Day rating') + 2;
+  const ratingChart = log.newChart()
+    .setChartType(Charts.ChartType.LINE)
+    .addRange(log.getRange(LOG_DATA_START_ROW, 1, DAYS_TO_PREFILL, 1))
+    .addRange(log.getRange(LOG_DATA_START_ROW, ratingCol, DAYS_TO_PREFILL, 1))
+    .setOption('title', 'Day rating over time')
+    .setPosition(HABITS.length + 22, 1, 0, 0)
+    .build();
+  traj.insertChart(ratingChart);
+
+  // ---------- README ----------
+  let readme = ss.getSheetByName('README') || ss.insertSheet('README');
+  readme.clear();
+  readme.getRange(1, 1).setValue('HABIT TRACKER').setFontWeight('bold').setFontSize(14);
+  readme.getRange(2, 1).setValue(
+    'FOUR TABS\n' +
+    '• Plan — your targets. Edit the Target column here to change a goal; the Log tab picks it up automatically.\n' +
+    '• Log — one row per day. Filled in by the phone app (or by hand). Green = on target, yellow = close, red = missed. ✔/✘ = booleans. Today\'s row is highlighted yellow in the date column.\n' +
+    '• Trajectory — streaks and 30/90-day averages per habit, refreshed automatically every time the phone app saves. Trend arrow compares your last 30 days to your last 90.\n' +
+    '• README — this page.\n\n' +
+    'HOW LOGGING WORKS\n' +
+    'Tap habits into the phone app and hit Save — it finds today\'s row in Log by date and fills it in. If you ever need to edit by hand, just type directly into the Log tab (✔ / ✘ for booleans, numbers for the rest).\n\n' +
+    'STREAKS & TRENDS\n' +
+    'Streak = consecutive days hitting target (or ✔ for booleans), counting back from the most recent logged day.\n' +
+    '30-day / 90-day = average value (or % completion for booleans) over that window.\n' +
+    'Trend: ↗ your last 30 days are meaningfully better than your last 90 · ↘ meaningfully worse · → about the same.\n\n' +
+    'This system deliberately has no perfect-day badges — a missed day is just data, not a failure.'
+  ).setWrap(true);
+  readme.setColumnWidth(1, 650);
+
+  // Tab order: Log, Plan, Trajectory, README
+  ss.setActiveSheet(log); ss.moveActiveSheet(1);
+  ss.setActiveSheet(plan); ss.moveActiveSheet(2);
+  ss.setActiveSheet(traj); ss.moveActiveSheet(3);
+  ss.setActiveSheet(readme); ss.moveActiveSheet(4);
+
+  // Remove the default empty Sheet1 if it's still hanging around
+  const sheet1 = ss.getSheetByName('Sheet1');
+  if (sheet1 && ss.getSheets().length > 1) ss.deleteSheet(sheet1);
+
+  refreshTrajectory();
+  SpreadsheetApp.flush();
+}
+
+function columnToLetter(col) {
+  let letter = '';
+  while (col > 0) {
+    const mod = (col - 1) % 26;
+    letter = String.fromCharCode(65 + mod) + letter;
+    col = Math.floor((col - mod) / 26);
+  }
+  return letter;
+}
+
+// Recomputes streak / 30-day / 90-day / trend for every habit and writes them into Trajectory.
+// Called automatically at the end of every doPost save.
+function refreshTrajectory() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const log = ss.getSheetByName('Log');
+  const traj = ss.getSheetByName('Trajectory');
+  if (!log || !traj) return;
+
+  const values = log.getDataRange().getValues();
+  const dataRows = values.slice(LOG_DATA_START_ROW - 1); // 0-indexed from row 3
+  const targetRow = values[1];
+
+  // Only consider rows up to today (future pre-filled rows are blank anyway, but be explicit)
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const loggedRows = dataRows.filter(r => r[0] instanceof Date && r[0] <= today);
+
+  const out = HABITS.map((h, idx) => {
+    const col = idx + 1; // index into row array (Date is 0)
+    const label = h[0], type = h[2], direction = h[5];
+    const target = parseFloat(targetRow[col]) || null;
+
+    // Most recent logged rows first for streak calc
+    const chron = [...loggedRows].reverse();
+
+    let streak = 0;
+    for (const r of chron) {
+      const v = r[col];
+      if (v === '' || v === null) break;
+      const hit = type === 'boolean'
+        ? v === '✔'
+        : (target !== null && (direction === 'higher' ? Number(v) >= target : Number(v) <= target));
+      if (hit) streak++; else break;
+    }
+
+    const windowAvg = (days) => {
+      const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - days);
+      const windowRows = loggedRows.filter(r => r[0] >= cutoff && r[col] !== '' && r[col] !== null);
+      if (windowRows.length === 0) return null;
+      if (type === 'boolean') {
+        const hits = windowRows.filter(r => r[col] === '✔').length;
+        return Math.round((hits / windowRows.length) * 100) + '%';
+      }
+      const nums = windowRows.map(r => Number(r[col])).filter(n => !isNaN(n));
+      if (nums.length === 0) return null;
+      return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10;
+    };
+
+    const avg30 = windowAvg(30);
+    const avg90 = windowAvg(90);
+
+    let trend = '→';
+    if (avg30 !== null && avg90 !== null) {
+      const n30 = parseFloat(avg30), n90 = parseFloat(avg90);
+      const diff = direction === 'lower' ? n90 - n30 : n30 - n90;
+      const threshold = n90 * 0.05 || 0.5;
+      trend = diff > threshold ? '↗' : diff < -threshold ? '↘' : '→';
+    }
+
+    return [label, type, streak, avg30 ?? '', avg90 ?? '', trend];
+  });
+
+  traj.getRange(2, 1, out.length, 6).setValues(out);
+}
+
+// ════════════════════════════════════════════════════════════
+// PHONE APP ENDPOINTS
+// ════════════════════════════════════════════════════════════
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    if (data.secret !== SECRET) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ ok: false, error: 'unauthorized' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName('Log');
+    const tz = Session.getScriptTimeZone();
+    const values = sheet.getDataRange().getValues();
+    const headerRow = values[0];
+
+    let rowIdx = -1;
+    for (let i = LOG_DATA_START_ROW - 1; i < values.length; i++) {
+      const cellDate = values[i][0];
+      if (cellDate instanceof Date) {
+        const iso = Utilities.formatDate(cellDate, tz, 'yyyy-MM-dd');
+        if (iso === data['Date']) { rowIdx = i + 1; break; }
+      }
+    }
+
+    // Translate app field keys -> pretty Log labels, and TRUE/FALSE -> ✔/✘
+    const rowUpdates = {};
+    Object.keys(KEY_MAP).forEach(appKey => {
+      if (data[appKey] === undefined || data[appKey] === '') return;
+      let val = data[appKey];
+      if (val === 'TRUE') val = '✔';
+      else if (val === 'FALSE') val = '✘';
+      rowUpdates[KEY_MAP[appKey]] = val;
+    });
+
+    if (rowIdx === -1) {
+      // Date fell outside the pre-filled range — append a new row
+      const newRow = new Array(headerRow.length).fill('');
+      newRow[0] = new Date(data['Date']);
+      headerRow.forEach((h, i) => { if (rowUpdates[h] !== undefined) newRow[i] = rowUpdates[h]; });
+      sheet.appendRow(newRow);
+      sheet.getRange(sheet.getLastRow(), 1).setNumberFormat('ddd d mmm');
+    } else {
+      headerRow.forEach((h, i) => {
+        if (rowUpdates[h] !== undefined) sheet.getRange(rowIdx, i + 1).setValue(rowUpdates[h]);
+      });
+    }
+
+    refreshTrajectory();
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  // ?targets=1&secret=... returns current Plan targets as JSON, for future app-side sync
+  if (e && e.parameter && e.parameter.targets) {
+    if (e.parameter.secret !== SECRET) {
+      return ContentService.createTextOutput(JSON.stringify({ error: 'unauthorized' })).setMimeType(ContentService.MimeType.JSON);
+    }
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const plan = ss.getSheetByName('Plan');
+    const rows = plan.getDataRange().getValues().slice(1);
+    const targets = {};
+    Object.keys(KEY_MAP).forEach(appKey => {
+      const label = KEY_MAP[appKey];
+      const row = rows.find(r => r[0] === label);
+      if (row) targets[appKey] = row[3];
+    });
+    return ContentService.createTextOutput(JSON.stringify(targets)).setMimeType(ContentService.MimeType.JSON);
+  }
+  return ContentService.createTextOutput('Habit Logger active');
+}
+
+════════════════════════════════════════════════════════════
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Habits">
+<title>Habit Logger</title>
+<style>
+:root {
+  --green: #40a66e;
+  --green-light: rgba(64,166,110,0.1);
+  --green-border: rgba(64,166,110,0.25);
+  --border: #e5e7eb;
+  --bg: #f2f3f5;
+  --card: #ffffff;
+  --text: #111827;
+  --muted: #6b7280;
+  --target-color: #c4c9d4;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --radius: 12px;
+  --safe-bottom: env(safe-area-inset-bottom, 16px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding-bottom: calc(90px + var(--safe-bottom));
+}
+
+/* Header */
+#header {
+  background: white;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 18px 12px;
+  position: sticky; top: 0; z-index: 10;
+}
+#header h1 { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
+#date-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+#date-input {
+  font-family: var(--font); font-size: 14px; font-weight: 600;
+  color: var(--muted); border: none; background: transparent; outline: none;
+}
+.draft-badge {
+  font-size: 11px; font-weight: 700; color: var(--green);
+  background: var(--green-light); border: 1px solid var(--green-border);
+  border-radius: 20px; padding: 2px 8px; display: none;
+}
+.draft-badge.show { display: inline-block; }
+
+main { padding: 16px 14px; max-width: 480px; margin: 0 auto; }
+
+.section { margin-bottom: 14px; }
+.section-label {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--muted); margin-bottom: 6px; padding-left: 4px;
+}
+.card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+
+/* Row */
+.row {
+  display: flex; align-items: center;
+  padding: 13px 14px; border-bottom: 1px solid #f3f4f6;
+  gap: 8px; min-height: 52px;
+}
+.row:last-child { border-bottom: none; }
+.row-label { flex: 1; font-size: 15px; font-weight: 600; color: var(--text); }
+
+/* Target chip */
+.target-chip {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--target-color);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: all .12s;
+  user-select: none;
+  flex-shrink: 0;
+}
+.target-chip:active { background: #f3f4f6; border-color: var(--border); }
+
+/* Number input */
+.num-input {
+  font-family: var(--font); font-size: 17px; font-weight: 700;
+  color: var(--text); text-align: right; border: none; outline: none;
+  background: transparent; width: 72px;
+}
+.num-input::placeholder { color: #d1d5db; font-weight: 400; font-size: 15px; }
+.num-unit { font-size: 12px; color: var(--muted); font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+
+/* Time input */
+.time-input {
+  font-family: var(--font); font-size: 17px; font-weight: 700;
+  color: var(--text); border: none; outline: none; background: transparent; text-align: right;
+}
+
+/* Toggle */
+.toggle-wrap { position: relative; width: 51px; height: 31px; flex-shrink: 0; }
+.toggle-wrap input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-track {
+  position: absolute; inset: 0;
+  background: #e5e7eb; border-radius: 999px; cursor: pointer; transition: background .2s;
+}
+.toggle-wrap input:checked + .toggle-track { background: var(--green); }
+.toggle-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 27px; height: 27px; background: white;
+  border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.25);
+  transition: transform .2s; pointer-events: none;
+}
+.toggle-wrap input:checked ~ .toggle-thumb { transform: translateX(20px); }
+
+/* Rating */
+.rating-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+.rating-btn {
+  width: 30px; height: 30px; border-radius: 7px;
+  border: 1.5px solid var(--border);
+  font-size: 12px; font-weight: 700; font-family: var(--font);
+  background: white; color: var(--muted); cursor: pointer;
+  transition: all .12s; display: flex; align-items: center; justify-content: center;
+}
+.rating-btn.selected { background: var(--green); color: white; border-color: var(--green); }
+.rating-btn.target-mark { color: var(--target-color); border-color: #e5e7eb; }
+
+/* Save bar */
+#save-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: white; border-top: 1px solid var(--border);
+  padding: 12px 14px;
+  padding-bottom: calc(12px + var(--safe-bottom));
+  z-index: 10;
+}
+#save-btn {
+  width: 100%; max-width: 480px; margin: 0 auto; display: block;
+  padding: 15px; background: var(--green); color: white;
+  font-family: var(--font); font-size: 16px; font-weight: 800;
+  border: none; border-radius: 12px; cursor: pointer;
+  transition: all .15s; letter-spacing: -.01em;
+}
+#save-btn:active { transform: scale(.98); background: #359960; }
+#save-btn:disabled { background: #9ca3af; cursor: default; transform: none; }
+
+/* Toast */
+#toast {
+  position: fixed; top: 80px; left: 50%;
+  transform: translateX(-50%) translateY(-16px);
+  background: #111; color: white; font-size: 14px; font-weight: 600;
+  padding: 10px 20px; border-radius: 20px; opacity: 0;
+  pointer-events: none; transition: all .22s; z-index: 100; white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.success { background: var(--green); }
+#toast.error { background: #dc2626; }
+
+/* Edit target sheet */
+#target-sheet {
+  position: fixed; inset: 0; z-index: 200;
+  display: none; align-items: flex-end; justify-content: center;
+  background: rgba(0,0,0,.4);
+}
+#target-sheet.open { display: flex; }
+#target-panel {
+  background: white; border-radius: 20px 20px 0 0;
+  padding: 20px 20px calc(20px + var(--safe-bottom));
+  width: 100%; max-width: 480px;
+}
+#target-panel h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+#target-val-input {
+  font-family: var(--font); font-size: 24px; font-weight: 700;
+  border: none; border-bottom: 2px solid var(--green); outline: none;
+  width: 100%; padding: 4px 0; margin-bottom: 16px;
+}
+#target-panel-btns { display: flex; gap: 8px; }
+.tpbtn {
+  flex: 1; padding: 13px; border-radius: 10px; border: 1px solid var(--border);
+  font-family: var(--font); font-size: 15px; font-weight: 700; cursor: pointer;
+  background: white;
+}
+.tpbtn.confirm { background: var(--green); color: white; border-color: var(--green); }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Habits</h1>
+  <div id="date-row">
+    <input type="date" id="date-input">
+    <span class="draft-badge" id="draft-badge">Draft saved</span>
+  </div>
+</div>
+
+<main>
+
+  <!-- Health -->
+  <div class="section">
+    <div class="section-label">Health</div>
+    <div class="card">
+      <div class="row">
+        <div class="row-label">Wake-up</div>
+        <span class="target-chip" data-key="wake-time" data-type="time"></span>
+        <input class="time-input" type="time" id="wake-time">
+      </div>
+      <div class="row">
+        <div class="row-label">Sleep</div>
+        <span class="target-chip" data-key="sleep-hours" data-type="number"></span>
+        <input class="num-input" type="number" id="sleep-hours" min="0" max="14" step="0.25" placeholder="—">
+        <span class="num-unit">hrs</span>
+      </div>
+      <div class="row">
+        <div class="row-label">Steps</div>
+        <span class="target-chip" data-key="steps" data-type="number"></span>
+        <input class="num-input" type="number" id="steps" min="0" step="100" placeholder="—" style="width:82px">
+      </div>
+      <div class="row">
+        <div class="row-label">Workout</div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="workout">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="row">
+        <div class="row-label">Calories</div>
+        <span class="target-chip" data-key="calories" data-type="number"></span>
+        <input class="num-input" type="number" id="calories" min="0" step="10" placeholder="—" style="width:66px">
+        <span class="num-unit">kcal</span>
+      </div>
+      <div class="row">
+        <div class="row-label">Water</div>
+        <span class="target-chip" data-key="water" data-type="number"></span>
+        <input class="num-input" type="number" id="water" min="0" max="10" step="0.1" placeholder="—">
+        <span class="num-unit">L</span>
+      </div>
+      <div class="row">
+        <div class="row-label">Supplements</div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="supplements">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="row">
+        <div class="row-label">Bedtime</div>
+        <span class="target-chip" data-key="bedtime" data-type="time"></span>
+        <input class="time-input" type="time" id="bedtime">
+      </div>
+    </div>
+  </div>
+
+  <!-- Creative -->
+  <div class="section">
+    <div class="section-label">Creative</div>
+    <div class="card">
+      <div class="row">
+        <div class="row-label">Morning pages</div>
+        <span class="target-chip" data-key="morning-pages" data-type="number"></span>
+        <input class="num-input" type="number" id="morning-pages" min="0" step="5" placeholder="—">
+        <span class="num-unit">min</span>
+      </div>
+      <div class="row">
+        <div class="row-label">Writing</div>
+        <span class="target-chip" data-key="writing" data-type="number"></span>
+        <input class="num-input" type="number" id="writing" min="0" step="5" placeholder="—">
+        <span class="num-unit">min</span>
+      </div>
+      <div class="row">
+        <div class="row-label">Reading</div>
+        <span class="target-chip" data-key="reading" data-type="number"></span>
+        <input class="num-input" type="number" id="reading" min="0" step="5" placeholder="—">
+        <span class="num-unit">min</span>
+      </div>
+      <div class="row">
+        <div class="row-label">Audiobooks</div>
+        <span class="target-chip" data-key="audiobooks" data-type="number"></span>
+        <input class="num-input" type="number" id="audiobooks" min="0" step="5" placeholder="—">
+        <span class="num-unit">min</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Work -->
+  <div class="section">
+    <div class="section-label">Work</div>
+    <div class="card">
+      <div class="row">
+        <div class="row-label">eBay listings</div>
+        <span class="target-chip" data-key="ebay-listings" data-type="number"></span>
+        <input class="num-input" type="number" id="ebay-listings" min="0" step="1" placeholder="—">
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily -->
+  <div class="section">
+    <div class="section-label">Daily</div>
+    <div class="card">
+      <div class="row">
+        <div class="row-label">Skincare AM</div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="skincare-am">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="row">
+        <div class="row-label">Skincare PM</div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="skincare-pm">
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="row" style="flex-wrap:wrap;gap:10px;">
+        <div class="row-label">Day rating</div>
+        <div class="rating-btns" id="rating-btns"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div id="save-bar">
+  <button id="save-btn">Save to Sheets</button>
+</div>
+
+<div id="toast"></div>
+
+<!-- Target edit sheet -->
+<div id="target-sheet">
+  <div id="target-panel">
+    <h3 id="target-panel-title">Edit target</h3>
+    <input type="text" id="target-val-input" inputmode="decimal">
+    <div id="target-panel-btns">
+      <button class="tpbtn" id="target-cancel">Cancel</button>
+      <button class="tpbtn confirm" id="target-confirm">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbydjK9gO8GvYncyzSHBIbgqTUcK-uzsxwWiiZdPL-1ykNZaVBezDQxY2lr_79J77B2nhw/exec';
+const APP_SECRET = '4e78845d45f9634d2afdcd68da36c64f';
+const DRAFT_KEY  = 'habit-logger-draft-v2';
+const TARGET_KEY = 'habit-logger-targets';
+
+const DEFAULT_TARGETS = {
+  'wake-time':     '04:30',
+  'sleep-hours':   '6.5',
+  'steps':         '10000',
+  'calories':      '1550',
+  'water':         '5',
+  'morning-pages': '30',
+  'writing':       '60',
+  'reading':       '90',
+  'audiobooks':    '30',
+  'ebay-listings': '40',
+  'bedtime':       '21:30',
+  'day-rating':    '7',
+};
+
+let targets = loadTargets();
+let dayRating = null;
+let editingTargetKey = null;
+
+// ── Init ───────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('date-input').value = new Date().toISOString().slice(0,10);
+
+  // Build rating buttons
+  const wrap = document.getElementById('rating-btns');
+  for (let i = 1; i <= 10; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'rating-btn' + (String(i) === targets['day-rating'] ? ' target-mark' : '');
+    btn.textContent = i;
+    btn.dataset.val = i;
+    btn.addEventListener('click', () => {
+      dayRating = i;
+      document.querySelectorAll('.rating-btn').forEach(b => {
+        b.classList.toggle('selected', parseInt(b.dataset.val) === i);
+      });
+      saveDraft();
+      saveField('day-rating', i);
+    });
+    wrap.appendChild(btn);
+  }
+
+  renderTargetChips();
+  loadDraft();
+
+  // Auto-save on any input — local draft on every keystroke, sheet save on
+  // change (checkbox toggle, or leaving a number/time field with a value)
+  document.querySelectorAll('input').forEach(el => {
+    el.addEventListener('change', saveDraft);
+    el.addEventListener('input', saveDraft);
+
+    if (el.type === 'checkbox') {
+      el.addEventListener('change', () => saveField(el.id, el.checked ? 'TRUE' : 'FALSE'));
+    } else if (el.type === 'number' || el.type === 'time') {
+      el.addEventListener('change', () => {
+        if (el.value !== '') saveField(el.id, el.value);
+      });
+    }
+  });
+
+  // Target chip clicks
+  document.querySelectorAll('.target-chip').forEach(chip => {
+    chip.addEventListener('click', () => openTargetEditor(chip.dataset.key, chip.dataset.type));
+  });
+
+  // Target sheet
+  document.getElementById('target-cancel').addEventListener('click', closeTargetEditor);
+  document.getElementById('target-confirm').addEventListener('click', confirmTarget);
+  document.getElementById('target-sheet').addEventListener('click', e => {
+    if (e.target === document.getElementById('target-sheet')) closeTargetEditor();
+  });
+
+  document.getElementById('save-btn').addEventListener('click', saveToSheets);
+});
+
+// ── Targets ────────────────────────────────────────────
+function loadTargets() {
+  try {
+    const raw = localStorage.getItem(TARGET_KEY);
+    if (raw) return { ...DEFAULT_TARGETS, ...JSON.parse(raw) };
+  } catch(e) {}
+  return { ...DEFAULT_TARGETS };
+}
+function saveTargets() {
+  localStorage.setItem(TARGET_KEY, JSON.stringify(targets));
+}
+
+function renderTargetChips() {
+  document.querySelectorAll('.target-chip').forEach(chip => {
+    const key = chip.dataset.key;
+    const val = targets[key];
+    chip.textContent = val ? '/ ' + val : '';
+  });
+  // Rating target mark
+  document.querySelectorAll('.rating-btn').forEach(btn => {
+    const isTarget = btn.dataset.val === targets['day-rating'];
+    if (!btn.classList.contains('selected')) {
+      btn.classList.toggle('target-mark', isTarget);
+    }
+  });
+}
+
+function openTargetEditor(key, type) {
+  editingTargetKey = key;
+  const label = document.querySelector(`[data-key="${key}"]`)?.closest('.row')?.querySelector('.row-label')?.textContent || key;
+  document.getElementById('target-panel-title').textContent = 'Target — ' + label;
+  document.getElementById('target-val-input').value = targets[key] || '';
+  document.getElementById('target-val-input').inputMode = type === 'time' ? 'text' : 'decimal';
+  document.getElementById('target-sheet').classList.add('open');
+  setTimeout(() => document.getElementById('target-val-input').focus(), 100);
+}
+function closeTargetEditor() {
+  document.getElementById('target-sheet').classList.remove('open');
+  editingTargetKey = null;
+}
+function confirmTarget() {
+  if (!editingTargetKey) return;
+  const val = document.getElementById('target-val-input').value.trim();
+  if (val) targets[editingTargetKey] = val;
+  saveTargets();
+  renderTargetChips();
+  closeTargetEditor();
+}
+
+// ── Draft ──────────────────────────────────────────────
+function getFormData() {
+  const v = id => {
+    const el = document.getElementById(id);
+    if (!el) return '';
+    if (el.type === 'checkbox') return el.checked ? 'TRUE' : 'FALSE';
+    return el.value;
+  };
+  return {
+    'Date':          document.getElementById('date-input').value,
+    'wake-time':     v('wake-time'),
+    'sleep-hours':   v('sleep-hours'),
+    'morning-pages': v('morning-pages'),
+    'skincare-am':   v('skincare-am'),
+    'writing':       v('writing'),
+    'workout':       v('workout'),
+    'steps':         v('steps'),
+    'supplements':   v('supplements'),
+    'calories':      v('calories'),
+    'water':         v('water'),
+    'ebay-listings': v('ebay-listings'),
+    'audiobooks':    v('audiobooks'),
+    'reading':       v('reading'),
+    'skincare-pm':   v('skincare-pm'),
+    'bedtime':       v('bedtime'),
+    'day-rating':    dayRating !== null ? dayRating : '',
+  };
+}
+
+function saveDraft() {
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(getFormData()));
+  document.getElementById('draft-badge').classList.add('show');
+}
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    const today = new Date().toISOString().slice(0,10);
+    if (d['Date'] && d['Date'] !== today) return;
+
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (el.type === 'checkbox') el.checked = val === 'TRUE';
+      else el.value = val || '';
+    };
+    ['wake-time','sleep-hours','morning-pages','writing','workout','steps',
+     'supplements','calories','water','ebay-listings','audiobooks','reading',
+     'skincare-am','skincare-pm','bedtime'].forEach(k => set(k, d[k]));
+
+    if (d['day-rating']) {
+      dayRating = parseInt(d['day-rating']);
+      document.querySelectorAll('.rating-btn').forEach(btn => {
+        btn.classList.toggle('selected', parseInt(btn.dataset.val) === dayRating);
+        if (btn.classList.contains('selected')) btn.classList.remove('target-mark');
+      });
+    }
+    document.getElementById('draft-badge').classList.add('show');
+  } catch(e) {}
+}
+
+// ── Save ───────────────────────────────────────────────
+// Saves a single field immediately (called on toggle/blur/rating tap).
+// Only sends Date + this one key, so nothing else on the row gets touched.
+let fieldSaveSeq = 0;
+async function saveField(key, value) {
+  const mySeq = ++fieldSaveSeq;
+  const payload = { Date: document.getElementById('date-input').value, secret: APP_SECRET };
+  payload[key] = value;
+  try {
+    const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (mySeq !== fieldSaveSeq) return; // a newer save superseded this one
+    if (json.ok) showToast('Saved ✓', 'success');
+    else showToast(json.error === 'unauthorized' ? 'Auth error' : 'Save failed', 'error');
+  } catch (e) {
+    if (mySeq !== fieldSaveSeq) return;
+    showToast('Offline — saved to draft only', 'error');
+  }
+}
+
+async function saveToSheets() {
+  if (SCRIPT_URL === 'YOUR_APPS_SCRIPT_URL_HERE') {
+    showToast('Paste your Apps Script URL first', 'error'); return;
+  }
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const payload = { ...getFormData(), secret: APP_SECRET };
+    const res = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (json.ok) {
+      localStorage.removeItem(DRAFT_KEY);
+      document.getElementById('draft-badge').classList.remove('show');
+      showToast('Saved ✓', 'success');
+      btn.textContent = 'Saved ✓';
+      setTimeout(() => { btn.textContent = 'Save to Sheets'; btn.disabled = false; }, 2000);
+    } else { throw new Error(json.error || 'Error'); }
+  } catch(e) {
+    showToast('Failed — check connection', 'error');
+    btn.textContent = 'Save to Sheets'; btn.disabled = false;
+  }
+}
+
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'show ' + type;
+  setTimeout(() => t.className = '', 2500);
+}
+</script>
+</body>
+</html>
