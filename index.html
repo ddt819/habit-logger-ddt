@@ -862,29 +862,43 @@ function renderTiles() {
 // there is never a scrollbar and never leftover dead space. Reserves
 // whatever space the rating strip actually takes up below the grid first.
 function sizeGrid() {
+  const header = document.getElementById('header');
+  const saveBar = document.getElementById('save-bar');
   const main = document.querySelector('main');
   const grid = document.getElementById('tile-grid');
   const strip = document.getElementById('rating-strip');
   const targetLabel = document.getElementById('rating-target');
+
+  // Reserve exactly the save bar's real rendered height (it was a static
+  // 90px guess before, which didn't match reality and let main's box run
+  // taller than the visible gap above the save bar).
+  document.body.style.paddingBottom = saveBar.getBoundingClientRect().height + 'px';
+
   const cols = getGridCols();
   const count = TILE_HABITS.length;
   const rows = Math.ceil(count / cols);
   const gap = parseFloat(getComputedStyle(grid).columnGap) || 9;
   const mainCs = getComputedStyle(main);
-  const padY = parseFloat(mainCs.paddingTop) + parseFloat(mainCs.paddingBottom);
   const availW = main.clientWidth - parseFloat(mainCs.paddingLeft) - parseFloat(mainCs.paddingRight);
 
   // Rating circles are computed from width first (10 across, same gap logic
-  // as the tile grid) rather than left at a fixed CSS size — that's what let
-  // the strip overflow past the bottom of the screen on some devices before,
-  // since a fixed-size element can't shrink to make room like the tiles do.
+  // as the tile grid) rather than left at a fixed CSS size — a fixed-size
+  // element can't shrink to make room the way the tiles do.
   const ratingGap = parseFloat(getComputedStyle(strip).gap) || 6;
   const ratingSize = Math.max(22, Math.floor((availW - ratingGap * 9) / 10));
   strip.style.setProperty('--rating-size', ratingSize + 'px');
 
+  // Measure the real, currently-rendered gap between the header and the
+  // fixed save bar directly, rather than trusting body's padding-bottom to
+  // match the save bar's actual height — that guess was off, which let
+  // content render underneath the (visually opaque, fixed-position) save
+  // bar even though it was technically still inside main's own box.
+  const padY = parseFloat(mainCs.paddingTop) + parseFloat(mainCs.paddingBottom);
+  const totalAvail = saveBar.getBoundingClientRect().top - header.getBoundingClientRect().bottom - padY;
+
   const stripH = ratingSize + parseFloat(getComputedStyle(strip).marginTop);
   const targetLabelH = targetLabel.getBoundingClientRect().height + parseFloat(getComputedStyle(targetLabel).marginTop);
-  const availH = main.clientHeight - padY - stripH - targetLabelH;
+  const availH = totalAvail - stripH - targetLabelH;
   const sizeByWidth = (availW - gap * (cols - 1)) / cols;
   const sizeByHeight = (availH - gap * (rows - 1)) / rows;
   const size = Math.max(30, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
