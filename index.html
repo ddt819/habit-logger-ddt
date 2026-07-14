@@ -487,28 +487,33 @@ function doGet(e) {
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius: 12px;
   --safe-bottom: env(safe-area-inset-bottom, 16px);
+  --grid-cols: 3;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 body {
   font-family: var(--font);
   background: var(--bg);
   color: var(--text);
-  min-height: 100vh;
+  height: 100vh;
+  display: flex; flex-direction: column;
   padding-bottom: calc(90px + var(--safe-bottom));
+  overflow: hidden;
 }
 
 /* Header */
 #header {
   background: white;
   border-bottom: 1px solid var(--border);
-  padding: 16px 18px 12px;
-  position: sticky; top: 0; z-index: 10;
+  padding: 12px 18px 10px;
+  position: sticky; top: 0; z-index: 10; flex-shrink: 0;
+  text-align: center;
 }
-#header h1 { font-size: 20px; font-weight: 800; letter-spacing: -.02em; }
-#date-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+#header h1 { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+#date-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; }
 #date-input {
   font-family: var(--font); font-size: 14px; font-weight: 600;
   color: var(--muted); border: none; background: transparent; outline: none;
+  text-align: center;
 }
 .draft-badge {
   font-size: 11px; font-weight: 700; color: var(--green);
@@ -517,82 +522,98 @@ body {
 }
 .draft-badge.show { display: inline-block; }
 
-main { padding: 16px 14px; max-width: 480px; margin: 0 auto; }
-
-.section { margin-bottom: 14px; }
-.section-label {
-  font-size: 11px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: .1em; color: var(--muted); margin-bottom: 6px; padding-left: 4px;
-}
-.card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
-
-/* Row */
-.row {
-  display: flex; align-items: center;
-  padding: 13px 14px; border-bottom: 1px solid #f3f4f6;
-  gap: 8px; min-height: 52px;
-}
-.row:last-child { border-bottom: none; }
-.row-label { flex: 1; font-size: 15px; font-weight: 600; color: var(--text); }
-
-/* Target chip */
-.target-chip {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--target-color);
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  white-space: nowrap;
-  transition: all .12s;
-  user-select: none;
-  flex-shrink: 0;
-}
-.target-chip:active { background: #f3f4f6; border-color: var(--border); }
-
-/* Number input */
-.num-input {
-  font-family: var(--font); font-size: 17px; font-weight: 700;
-  color: var(--text); text-align: right; border: none; outline: none;
-  background: transparent; width: 72px;
-}
-.num-input::placeholder { color: #d1d5db; font-weight: 400; font-size: 15px; }
-.num-unit { font-size: 12px; color: var(--muted); font-weight: 500; white-space: nowrap; flex-shrink: 0; }
-
-/* Time input */
-.time-input {
-  font-family: var(--font); font-size: 17px; font-weight: 700;
-  color: var(--text); border: none; outline: none; background: transparent; text-align: right;
+main {
+  padding: 10px 10px 6px; max-width: 480px; margin: 0 auto;
+  display: flex; flex-direction: column; justify-content: center;
+  flex: 1; min-height: 0; overflow: hidden; width: 100%;
 }
 
-/* Toggle */
-.toggle-wrap { position: relative; width: 51px; height: 31px; flex-shrink: 0; }
-.toggle-wrap input { opacity: 0; width: 0; height: 0; position: absolute; }
-.toggle-track {
-  position: absolute; inset: 0;
-  background: #e5e7eb; border-radius: 999px; cursor: pointer; transition: background .2s;
+/* Tile grid — one flat grid, no section headings, all tiles the same size.
+   Column count is fixed but tile size is computed in JS (sizeGrid()) from
+   whatever screen height/width is actually available, so the whole grid
+   always fills the screen edge-to-edge with no scrolling, on any device. */
+.tile-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px;
+  justify-content: center; align-content: center;
 }
-.toggle-wrap input:checked + .toggle-track { background: var(--green); }
-.toggle-thumb {
-  position: absolute; top: 2px; left: 2px;
-  width: 27px; height: 27px; background: white;
-  border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.25);
-  transition: transform .2s; pointer-events: none;
+.tile {
+  background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+  width: var(--tile-size, 100%); height: var(--tile-size, auto);
+  aspect-ratio: 1 / 1; padding: 10px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center; gap: 3px;
+  cursor: pointer; transition: transform .12s, background .12s;
+  position: relative; -webkit-user-select: none; user-select: none;
 }
-.toggle-wrap input:checked ~ .toggle-thumb { transform: translateX(20px); }
+.tile:active { transform: scale(.96); background: #fafafa; }
+.tile.logged { background: var(--green-light); border-color: var(--green-border); }
+.tile-label { font-size: 11.5px; font-weight: 700; color: var(--text); line-height: 1.2; }
+.tile-value { font-size: 14.5px; font-weight: 800; color: var(--target-color); word-break: break-word; }
+.tile.logged .tile-value { color: var(--green); }
+.tile-unit { font-size: 9.5px; font-weight: 600; color: var(--muted); }
+.tile-check {
+  position: absolute; top: 7px; right: 7px; width: 17px; height: 17px; border-radius: 50%;
+  background: var(--green); color: white; font-size: 10px; font-weight: 800;
+  display: none; align-items: center; justify-content: center;
+}
+.tile.logged .tile-check { display: flex; }
 
-/* Rating */
-.rating-btns { display: flex; gap: 4px; flex-wrap: wrap; }
-.rating-btn {
-  width: 30px; height: 30px; border-radius: 7px;
-  border: 1.5px solid var(--border);
-  font-size: 12px; font-weight: 700; font-family: var(--font);
-  background: white; color: var(--muted); cursor: pointer;
-  transition: all .12s; display: flex; align-items: center; justify-content: center;
+/* Log sheet — tap a tile to open, enter a value, Save locks it */
+#log-sheet {
+  position: fixed; inset: 0; z-index: 200;
+  display: none; align-items: flex-end; justify-content: center;
+  background: rgba(0,0,0,.4);
 }
-.rating-btn.selected { background: var(--green); color: white; border-color: var(--green); }
-.rating-btn.target-mark { color: var(--target-color); border-color: #e5e7eb; }
+#log-sheet.open { display: flex; }
+#log-panel {
+  background: white; border-radius: 20px 20px 0 0;
+  padding: 22px 20px calc(20px + var(--safe-bottom));
+  width: 100%; max-width: 480px;
+}
+#log-panel h3 { font-size: 17px; font-weight: 800; text-align: center; }
+#log-target-row {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 13px; color: var(--muted); margin: 4px 0 20px; text-align: center;
+}
+#log-target-edit { color: var(--target-color); font-weight: 600; cursor: pointer; text-decoration: underline; }
+#log-target-input {
+  font-family: var(--font); font-size: 15px; font-weight: 700; text-align: center;
+  border: none; border-bottom: 2px solid var(--green); outline: none; width: 100px; display: none;
+  margin: 4px 0 20px;
+}
+#log-control { min-height: 90px; display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
+
+.log-num-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
+.log-step-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--border); flex-shrink: 0;
+  background: white; font-size: 20px; font-weight: 700; color: var(--text); cursor: pointer;
+}
+.log-step-btn:active { background: #f3f4f6; }
+.log-num-mid { display: flex; flex-direction: column; align-items: center; }
+#log-num-input {
+  font-family: var(--font); font-size: 32px; font-weight: 800; text-align: center;
+  border: none; outline: none; width: 120px; color: var(--text);
+}
+#log-num-unit { font-size: 13px; color: var(--muted); font-weight: 600; }
+
+#log-time-input {
+  font-family: var(--font); font-size: 32px; font-weight: 800; text-align: center;
+  border: none; outline: none; color: var(--text);
+}
+
+.log-bool-row { display: flex; gap: 10px; width: 100%; }
+.log-bool-btn {
+  flex: 1; padding: 16px; border-radius: 12px; border: 1.5px solid var(--border);
+  background: white; font-size: 16px; font-weight: 700; color: var(--text); cursor: pointer;
+}
+.log-bool-btn.selected { background: var(--green); color: white; border-color: var(--green); }
+
+.log-rating-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; }
+.log-rating-btn {
+  aspect-ratio: 1 / 1; border-radius: 10px; border: 1.5px solid var(--border);
+  background: white; font-size: 15px; font-weight: 700; color: var(--muted); cursor: pointer;
+}
+.log-rating-btn.selected { background: var(--green); color: white; border-color: var(--green); }
+.log-rating-btn.target-mark { color: var(--target-color); }
 
 /* Save bar */
 #save-bar {
@@ -624,25 +645,6 @@ main { padding: 16px 14px; max-width: 480px; margin: 0 auto; }
 #toast.success { background: var(--green); }
 #toast.error { background: #dc2626; }
 
-/* Edit target sheet */
-#target-sheet {
-  position: fixed; inset: 0; z-index: 200;
-  display: none; align-items: flex-end; justify-content: center;
-  background: rgba(0,0,0,.4);
-}
-#target-sheet.open { display: flex; }
-#target-panel {
-  background: white; border-radius: 20px 20px 0 0;
-  padding: 20px 20px calc(20px + var(--safe-bottom));
-  width: 100%; max-width: 480px;
-}
-#target-panel h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
-#target-val-input {
-  font-family: var(--font); font-size: 24px; font-weight: 700;
-  border: none; border-bottom: 2px solid var(--green); outline: none;
-  width: 100%; padding: 4px 0; margin-bottom: 16px;
-}
-#target-panel-btns { display: flex; gap: 8px; }
 .tpbtn {
   flex: 1; padding: 13px; border-radius: 10px; border: 1px solid var(--border);
   font-family: var(--font); font-size: 15px; font-weight: 700; cursor: pointer;
@@ -662,133 +664,7 @@ main { padding: 16px 14px; max-width: 480px; margin: 0 auto; }
 </div>
 
 <main>
-
-  <!-- Health -->
-  <div class="section">
-    <div class="section-label">Health</div>
-    <div class="card">
-      <div class="row">
-        <div class="row-label">Wake-up</div>
-        <span class="target-chip" data-key="wake-time" data-type="time"></span>
-        <input class="time-input" type="time" id="wake-time">
-      </div>
-      <div class="row">
-        <div class="row-label">Sleep</div>
-        <span class="target-chip" data-key="sleep-hours" data-type="number"></span>
-        <input class="num-input" type="number" id="sleep-hours" min="0" max="14" step="0.25" placeholder="—">
-        <span class="num-unit">hrs</span>
-      </div>
-      <div class="row">
-        <div class="row-label">Steps</div>
-        <span class="target-chip" data-key="steps" data-type="number"></span>
-        <input class="num-input" type="number" id="steps" min="0" step="100" placeholder="—" style="width:82px">
-      </div>
-      <div class="row">
-        <div class="row-label">Workout</div>
-        <label class="toggle-wrap">
-          <input type="checkbox" id="workout">
-          <div class="toggle-track"></div>
-          <div class="toggle-thumb"></div>
-        </label>
-      </div>
-      <div class="row">
-        <div class="row-label">Calories</div>
-        <span class="target-chip" data-key="calories" data-type="number"></span>
-        <input class="num-input" type="number" id="calories" min="0" step="10" placeholder="—" style="width:66px">
-        <span class="num-unit">kcal</span>
-      </div>
-      <div class="row">
-        <div class="row-label">Water</div>
-        <span class="target-chip" data-key="water" data-type="number"></span>
-        <input class="num-input" type="number" id="water" min="0" max="10" step="0.1" placeholder="—">
-        <span class="num-unit">L</span>
-      </div>
-      <div class="row">
-        <div class="row-label">Supplements</div>
-        <label class="toggle-wrap">
-          <input type="checkbox" id="supplements">
-          <div class="toggle-track"></div>
-          <div class="toggle-thumb"></div>
-        </label>
-      </div>
-      <div class="row">
-        <div class="row-label">Bedtime</div>
-        <span class="target-chip" data-key="bedtime" data-type="time"></span>
-        <input class="time-input" type="time" id="bedtime">
-      </div>
-    </div>
-  </div>
-
-  <!-- Creative -->
-  <div class="section">
-    <div class="section-label">Creative</div>
-    <div class="card">
-      <div class="row">
-        <div class="row-label">Morning pages</div>
-        <span class="target-chip" data-key="morning-pages" data-type="number"></span>
-        <input class="num-input" type="number" id="morning-pages" min="0" step="5" placeholder="—">
-        <span class="num-unit">min</span>
-      </div>
-      <div class="row">
-        <div class="row-label">Writing</div>
-        <span class="target-chip" data-key="writing" data-type="number"></span>
-        <input class="num-input" type="number" id="writing" min="0" step="5" placeholder="—">
-        <span class="num-unit">min</span>
-      </div>
-      <div class="row">
-        <div class="row-label">Reading</div>
-        <span class="target-chip" data-key="reading" data-type="number"></span>
-        <input class="num-input" type="number" id="reading" min="0" step="5" placeholder="—">
-        <span class="num-unit">min</span>
-      </div>
-      <div class="row">
-        <div class="row-label">Audiobooks</div>
-        <span class="target-chip" data-key="audiobooks" data-type="number"></span>
-        <input class="num-input" type="number" id="audiobooks" min="0" step="5" placeholder="—">
-        <span class="num-unit">min</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Work -->
-  <div class="section">
-    <div class="section-label">Work</div>
-    <div class="card">
-      <div class="row">
-        <div class="row-label">eBay listings</div>
-        <span class="target-chip" data-key="ebay-listings" data-type="number"></span>
-        <input class="num-input" type="number" id="ebay-listings" min="0" step="1" placeholder="—">
-      </div>
-    </div>
-  </div>
-
-  <!-- Daily -->
-  <div class="section">
-    <div class="section-label">Daily</div>
-    <div class="card">
-      <div class="row">
-        <div class="row-label">Skincare AM</div>
-        <label class="toggle-wrap">
-          <input type="checkbox" id="skincare-am">
-          <div class="toggle-track"></div>
-          <div class="toggle-thumb"></div>
-        </label>
-      </div>
-      <div class="row">
-        <div class="row-label">Skincare PM</div>
-        <label class="toggle-wrap">
-          <input type="checkbox" id="skincare-pm">
-          <div class="toggle-track"></div>
-          <div class="toggle-thumb"></div>
-        </label>
-      </div>
-      <div class="row" style="flex-wrap:wrap;gap:10px;">
-        <div class="row-label">Day rating</div>
-        <div class="rating-btns" id="rating-btns"></div>
-      </div>
-    </div>
-  </div>
-
+  <div class="tile-grid" id="tile-grid"></div>
 </main>
 
 <div id="save-bar">
@@ -797,14 +673,19 @@ main { padding: 16px 14px; max-width: 480px; margin: 0 auto; }
 
 <div id="toast"></div>
 
-<!-- Target edit sheet -->
-<div id="target-sheet">
-  <div id="target-panel">
-    <h3 id="target-panel-title">Edit target</h3>
-    <input type="text" id="target-val-input" inputmode="decimal">
-    <div id="target-panel-btns">
-      <button class="tpbtn" id="target-cancel">Cancel</button>
-      <button class="tpbtn confirm" id="target-confirm">Save</button>
+<!-- Log sheet: tap a tile to open this, enter the value, Save locks the tile for the day -->
+<div id="log-sheet">
+  <div id="log-panel">
+    <h3 id="log-panel-title">Habit</h3>
+    <div id="log-target-row">
+      <span id="log-target-text"></span>
+      <span id="log-target-edit">Edit target</span>
+    </div>
+    <input type="text" id="log-target-input" inputmode="decimal">
+    <div id="log-control"></div>
+    <div id="log-panel-btns">
+      <button class="tpbtn" id="log-cancel">Cancel</button>
+      <button class="tpbtn confirm" id="log-save">Save</button>
     </div>
   </div>
 </div>
@@ -830,64 +711,121 @@ const DEFAULT_TARGETS = {
   'day-rating':    '7',
 };
 
+// Client-side mirror of the Apps Script HABITS list — drives tile rendering
+// and which control the log sheet shows. Keep in sync with the server list.
+const HABITS_META = [
+  { key: 'wake-time',      label: 'Wake-up',        type: 'time',    section: 'health' },
+  { key: 'sleep-hours',    label: 'Sleep',          type: 'number',  unit: 'hrs',  step: 0.25, section: 'health' },
+  { key: 'steps',          label: 'Steps',          type: 'number',  unit: 'steps', step: 100, section: 'health' },
+  { key: 'workout',        label: 'Workout',        type: 'boolean', section: 'health' },
+  { key: 'calories',       label: 'Calories',       type: 'number',  unit: 'kcal', step: 10, section: 'health' },
+  { key: 'water',          label: 'Water',          type: 'number',  unit: 'L',    step: 0.1, section: 'health' },
+  { key: 'supplements',    label: 'Supplements',    type: 'boolean', section: 'health' },
+  { key: 'bedtime',        label: 'Bedtime',        type: 'time',    section: 'health' },
+  { key: 'morning-pages',  label: 'Morning pages',  type: 'number',  unit: 'min', step: 5, section: 'creative' },
+  { key: 'writing',        label: 'Writing',        type: 'number',  unit: 'min', step: 5, section: 'creative' },
+  { key: 'reading',        label: 'Reading',        type: 'number',  unit: 'min', step: 5, section: 'creative' },
+  { key: 'audiobooks',     label: 'Audiobooks',     type: 'number',  unit: 'min', step: 5, section: 'creative' },
+  { key: 'ebay-listings',  label: 'eBay listings',  type: 'number',  unit: '',    step: 1, section: 'daily' },
+  { key: 'skincare-am',    label: 'Skincare AM',    type: 'boolean', section: 'daily' },
+  { key: 'skincare-pm',    label: 'Skincare PM',    type: 'boolean', section: 'daily' },
+  { key: 'day-rating',     label: 'Day rating',     type: 'rating',  section: 'daily' },
+];
+
 let targets = loadTargets();
-let dayRating = null;
-let editingTargetKey = null;
+let values = {};       // today's entered values, keyed same as HABITS_META
+let editingKey = null; // habit key currently open in the log sheet
+let pendingValue = null; // value the log sheet control currently holds, applied on Save
 
 // ── Init ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('date-input').value = new Date().toISOString().slice(0,10);
 
-  // Build rating buttons
-  const wrap = document.getElementById('rating-btns');
-  for (let i = 1; i <= 10; i++) {
-    const btn = document.createElement('button');
-    btn.className = 'rating-btn' + (String(i) === targets['day-rating'] ? ' target-mark' : '');
-    btn.textContent = i;
-    btn.dataset.val = i;
-    btn.addEventListener('click', () => {
-      dayRating = i;
-      document.querySelectorAll('.rating-btn').forEach(b => {
-        b.classList.toggle('selected', parseInt(b.dataset.val) === i);
-      });
-      saveDraft();
-      saveField('day-rating', i);
-    });
-    wrap.appendChild(btn);
-  }
-
-  renderTargetChips();
   loadDraft();
+  renderTiles();
+  sizeGrid();
+  window.addEventListener('resize', sizeGrid);
+  window.addEventListener('orientationchange', sizeGrid);
 
-  // Auto-save on any input — local draft on every keystroke, sheet save on
-  // change (checkbox toggle, or leaving a number/time field with a value)
-  document.querySelectorAll('input').forEach(el => {
-    el.addEventListener('change', saveDraft);
-    el.addEventListener('input', saveDraft);
-
-    if (el.type === 'checkbox') {
-      el.addEventListener('change', () => saveField(el.id, el.checked ? 'TRUE' : 'FALSE'));
-    } else if (el.type === 'number' || el.type === 'time') {
-      el.addEventListener('change', () => {
-        if (el.value !== '') saveField(el.id, el.value);
-      });
-    }
+  document.getElementById('log-cancel').addEventListener('click', closeLogSheet);
+  document.getElementById('log-save').addEventListener('click', saveLogValue);
+  document.getElementById('log-sheet').addEventListener('click', e => {
+    if (e.target === document.getElementById('log-sheet')) closeLogSheet();
   });
-
-  // Target chip clicks
-  document.querySelectorAll('.target-chip').forEach(chip => {
-    chip.addEventListener('click', () => openTargetEditor(chip.dataset.key, chip.dataset.type));
-  });
-
-  // Target sheet
-  document.getElementById('target-cancel').addEventListener('click', closeTargetEditor);
-  document.getElementById('target-confirm').addEventListener('click', confirmTarget);
-  document.getElementById('target-sheet').addEventListener('click', e => {
-    if (e.target === document.getElementById('target-sheet')) closeTargetEditor();
-  });
+  document.getElementById('log-target-edit').addEventListener('click', startEditTarget);
+  document.getElementById('log-target-input').addEventListener('blur', confirmEditTarget);
 
   document.getElementById('save-btn').addEventListener('click', saveToSheets);
 });
+
+// ── Tiles ──────────────────────────────────────────────
+function getGridCols() {
+  const v = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--grid-cols'));
+  return v || 3;
+}
+
+function renderTiles() {
+  const grid = document.getElementById('tile-grid');
+  grid.innerHTML = '';
+  HABITS_META.forEach(h => {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.dataset.key = h.key;
+    tile.innerHTML =
+      '<div class="tile-check">✓</div>' +
+      '<div class="tile-label">' + h.label + '</div>' +
+      '<div>' +
+        '<div class="tile-value"></div>' +
+        (h.unit ? '<div class="tile-unit">' + h.unit + '</div>' : '') +
+      '</div>';
+    tile.addEventListener('click', () => openLogSheet(h.key));
+    grid.appendChild(tile);
+  });
+  updateTileStates();
+}
+
+// Computes the largest square tile size that makes the whole grid fit the
+// screen exactly (width AND height) on whatever device this loads on, so
+// there is never a scrollbar and never leftover dead space.
+function sizeGrid() {
+  const main = document.querySelector('main');
+  const grid = document.getElementById('tile-grid');
+  const cols = getGridCols();
+  const count = HABITS_META.length;
+  const rows = Math.ceil(count / cols);
+  const gap = parseFloat(getComputedStyle(grid).columnGap) || 9;
+  const mainCs = getComputedStyle(main);
+  const padY = parseFloat(mainCs.paddingTop) + parseFloat(mainCs.paddingBottom);
+  const availW = main.clientWidth - parseFloat(mainCs.paddingLeft) - parseFloat(mainCs.paddingRight);
+  const availH = main.clientHeight - padY;
+  const sizeByWidth = (availW - gap * (cols - 1)) / cols;
+  const sizeByHeight = (availH - gap * (rows - 1)) / rows;
+  const size = Math.max(40, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
+  grid.style.setProperty('--tile-size', size + 'px');
+  grid.style.gridTemplateColumns = 'repeat(' + cols + ', ' + size + 'px)';
+}
+window.sizeGrid = sizeGrid;
+
+function displayValue(h) {
+  const v = values[h.key];
+  if (v !== undefined && v !== '' && v !== null) {
+    if (h.type === 'boolean') return v === 'TRUE' ? 'Done' : 'Not done';
+    return String(v);
+  }
+  const t = targets[h.key];
+  return t ? '/ ' + t : '—';
+}
+
+function updateTileStates() {
+  document.querySelectorAll('.tile').forEach(tile => {
+    const key = tile.dataset.key;
+    const meta = HABITS_META.find(h => h.key === key);
+    const v = values[key];
+    const logged = v !== undefined && v !== '' && v !== null;
+    tile.classList.toggle('logged', logged);
+    tile.querySelector('.tile-value').textContent = displayValue(meta);
+  });
+}
 
 // ── Targets ────────────────────────────────────────────
 function loadTargets() {
@@ -901,70 +839,130 @@ function saveTargets() {
   localStorage.setItem(TARGET_KEY, JSON.stringify(targets));
 }
 
-function renderTargetChips() {
-  document.querySelectorAll('.target-chip').forEach(chip => {
-    const key = chip.dataset.key;
-    const val = targets[key];
-    chip.textContent = val ? '/ ' + val : '';
-  });
-  // Rating target mark
-  document.querySelectorAll('.rating-btn').forEach(btn => {
-    const isTarget = btn.dataset.val === targets['day-rating'];
-    if (!btn.classList.contains('selected')) {
-      btn.classList.toggle('target-mark', isTarget);
-    }
-  });
+function renderTargetText(meta) {
+  const t = targets[meta.key];
+  document.getElementById('log-target-text').textContent =
+    t ? ('Target: ' + t + (meta.unit ? ' ' + meta.unit : '')) : 'No target set';
 }
 
-function openTargetEditor(key, type) {
-  editingTargetKey = key;
-  const label = document.querySelector(`[data-key="${key}"]`)?.closest('.row')?.querySelector('.row-label')?.textContent || key;
-  document.getElementById('target-panel-title').textContent = 'Target — ' + label;
-  document.getElementById('target-val-input').value = targets[key] || '';
-  document.getElementById('target-val-input').inputMode = type === 'time' ? 'text' : 'decimal';
-  document.getElementById('target-sheet').classList.add('open');
-  setTimeout(() => document.getElementById('target-val-input').focus(), 100);
+function startEditTarget() {
+  const meta = HABITS_META.find(h => h.key === editingKey);
+  if (!meta) return;
+  document.getElementById('log-target-text').style.display = 'none';
+  document.getElementById('log-target-edit').style.display = 'none';
+  const input = document.getElementById('log-target-input');
+  input.style.display = '';
+  input.value = targets[editingKey] || '';
+  input.inputMode = meta.type === 'time' ? 'text' : 'decimal';
+  input.focus();
 }
-function closeTargetEditor() {
-  document.getElementById('target-sheet').classList.remove('open');
-  editingTargetKey = null;
+function confirmEditTarget() {
+  const input = document.getElementById('log-target-input');
+  const val = input.value.trim();
+  if (val && editingKey) { targets[editingKey] = val; saveTargets(); }
+  input.style.display = 'none';
+  document.getElementById('log-target-text').style.display = '';
+  document.getElementById('log-target-edit').style.display = '';
+  const meta = HABITS_META.find(h => h.key === editingKey);
+  if (meta) renderTargetText(meta);
 }
-function confirmTarget() {
-  if (!editingTargetKey) return;
-  const val = document.getElementById('target-val-input').value.trim();
-  if (val) targets[editingTargetKey] = val;
-  saveTargets();
-  renderTargetChips();
-  closeTargetEditor();
+
+// ── Log sheet ──────────────────────────────────────────
+function openLogSheet(key) {
+  editingKey = key;
+  const meta = HABITS_META.find(h => h.key === key);
+  pendingValue = values[key] ?? '';
+
+  document.getElementById('log-panel-title').textContent = meta.label;
+  document.getElementById('log-target-input').style.display = 'none';
+  document.getElementById('log-target-text').style.display = '';
+  document.getElementById('log-target-edit').style.display = '';
+  renderTargetText(meta);
+
+  const control = document.getElementById('log-control');
+  control.innerHTML = '';
+
+  if (meta.type === 'number') {
+    control.innerHTML =
+      '<div class="log-num-row">' +
+        '<button class="log-step-btn" id="log-dec">−</button>' +
+        '<div class="log-num-mid"><input type="text" inputmode="decimal" id="log-num-input" placeholder="—">' +
+        (meta.unit ? '<div id="log-num-unit">' + meta.unit + '</div>' : '') + '</div>' +
+        '<button class="log-step-btn" id="log-inc">+</button>' +
+      '</div>';
+    const input = document.getElementById('log-num-input');
+    input.value = pendingValue;
+    const decimals = meta.step < 1 ? 1 : 0;
+    const step = (delta) => {
+      const cur = parseFloat(input.value || '0') || 0;
+      input.value = (cur + delta).toFixed(decimals);
+      pendingValue = input.value;
+    };
+    document.getElementById('log-dec').addEventListener('click', () => step(-meta.step));
+    document.getElementById('log-inc').addEventListener('click', () => step(meta.step));
+    input.addEventListener('input', () => pendingValue = input.value);
+  } else if (meta.type === 'time') {
+    control.innerHTML = '<input type="time" id="log-time-input">';
+    const input = document.getElementById('log-time-input');
+    input.value = pendingValue;
+    input.addEventListener('input', () => pendingValue = input.value);
+  } else if (meta.type === 'boolean') {
+    control.innerHTML =
+      '<div class="log-bool-row">' +
+        '<button class="log-bool-btn" data-val="TRUE" id="log-bool-yes">Done</button>' +
+        '<button class="log-bool-btn" data-val="FALSE" id="log-bool-no">Not done</button>' +
+      '</div>';
+    if (pendingValue) {
+      document.getElementById(pendingValue === 'TRUE' ? 'log-bool-yes' : 'log-bool-no').classList.add('selected');
+    }
+    control.querySelectorAll('.log-bool-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        control.querySelectorAll('.log-bool-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        pendingValue = btn.dataset.val;
+      });
+    });
+  } else if (meta.type === 'rating') {
+    const grid = document.createElement('div');
+    grid.className = 'log-rating-grid';
+    for (let i = 1; i <= 10; i++) {
+      const btn = document.createElement('button');
+      const isTarget = String(i) === targets['day-rating'];
+      const isSelected = String(pendingValue) === String(i);
+      btn.className = 'log-rating-btn' + (isTarget && !isSelected ? ' target-mark' : '') + (isSelected ? ' selected' : '');
+      btn.textContent = i;
+      btn.addEventListener('click', () => {
+        grid.querySelectorAll('.log-rating-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        pendingValue = i;
+      });
+      grid.appendChild(btn);
+    }
+    control.appendChild(grid);
+  }
+
+  document.getElementById('log-sheet').classList.add('open');
+}
+
+function closeLogSheet() {
+  document.getElementById('log-sheet').classList.remove('open');
+  editingKey = null;
+}
+
+function saveLogValue() {
+  if (!editingKey) return;
+  const val = pendingValue;
+  if (val === '' || val === undefined || val === null) { closeLogSheet(); return; }
+  values[editingKey] = val;
+  saveDraft();
+  saveField(editingKey, val);
+  updateTileStates();
+  closeLogSheet();
 }
 
 // ── Draft ──────────────────────────────────────────────
 function getFormData() {
-  const v = id => {
-    const el = document.getElementById(id);
-    if (!el) return '';
-    if (el.type === 'checkbox') return el.checked ? 'TRUE' : 'FALSE';
-    return el.value;
-  };
-  return {
-    'Date':          document.getElementById('date-input').value,
-    'wake-time':     v('wake-time'),
-    'sleep-hours':   v('sleep-hours'),
-    'morning-pages': v('morning-pages'),
-    'skincare-am':   v('skincare-am'),
-    'writing':       v('writing'),
-    'workout':       v('workout'),
-    'steps':         v('steps'),
-    'supplements':   v('supplements'),
-    'calories':      v('calories'),
-    'water':         v('water'),
-    'ebay-listings': v('ebay-listings'),
-    'audiobooks':    v('audiobooks'),
-    'reading':       v('reading'),
-    'skincare-pm':   v('skincare-pm'),
-    'bedtime':       v('bedtime'),
-    'day-rating':    dayRating !== null ? dayRating : '',
-  };
+  return { Date: document.getElementById('date-input').value, ...values };
 }
 
 function saveDraft() {
@@ -979,24 +977,8 @@ function loadDraft() {
     const d = JSON.parse(raw);
     const today = new Date().toISOString().slice(0,10);
     if (d['Date'] && d['Date'] !== today) return;
-
-    const set = (id, val) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (el.type === 'checkbox') el.checked = val === 'TRUE';
-      else el.value = val || '';
-    };
-    ['wake-time','sleep-hours','morning-pages','writing','workout','steps',
-     'supplements','calories','water','ebay-listings','audiobooks','reading',
-     'skincare-am','skincare-pm','bedtime'].forEach(k => set(k, d[k]));
-
-    if (d['day-rating']) {
-      dayRating = parseInt(d['day-rating']);
-      document.querySelectorAll('.rating-btn').forEach(btn => {
-        btn.classList.toggle('selected', parseInt(btn.dataset.val) === dayRating);
-        if (btn.classList.contains('selected')) btn.classList.remove('target-mark');
-      });
-    }
+    values = { ...d };
+    delete values['Date'];
     document.getElementById('draft-badge').classList.add('show');
   } catch(e) {}
 }
