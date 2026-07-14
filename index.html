@@ -593,18 +593,16 @@ main {
 .tile:active { transform: scale(.96); background: #fafafa; }
 .tile.logged { background: var(--green-light); border-color: var(--green-border); }
 .tile-label { font-size: 16px; font-weight: 700; color: var(--text); line-height: 1.2; }
-.tile-value { font-size: 21px; font-weight: 800; color: var(--target-color); word-break: break-word; }
-.tile.logged .tile-value { color: var(--green); }
-.tile-value.combo-progress { color: var(--green); font-size: 13px; }
-.tile-unit { font-size: 13px; font-weight: 600; color: var(--muted); }
-.tile-check {
-  position: absolute; top: 7px; right: 7px; width: 17px; height: 17px; border-radius: 50%;
-  background: var(--green); color: white; font-size: 10px; font-weight: 800;
-  display: none; align-items: center; justify-content: center;
-}
-.tile.logged .tile-check { display: flex; }
-
 .tile-emoji { font-size: 19px; line-height: 1; }
+
+/* Progress bar — replaces showing the raw value/target as numbers. No tick
+   badge needed; the tile's own background turning green at 100% is enough. */
+.tile-bar-track {
+  width: 100%; height: 6px; border-radius: 999px; background: #eceef1;
+  overflow: hidden; margin-top: 2px;
+}
+.tile-bar-fill { height: 100%; border-radius: 999px; background: var(--muted); }
+.tile.logged .tile-bar-fill { background: var(--green); }
 
 /* Combo fields inside the log sheet — several sub-fields shown together */
 .combo-field { width: 100%; margin-bottom: 26px; }
@@ -829,7 +827,7 @@ const DEFAULT_TARGETS = {
 // from the previous night's bedtime + that day's wake-up, not app-logged.
 const HABITS_META = [
   { key: 'wake-time',     label: 'Wake-up',       emoji: '🌅', type: 'time' },
-  { key: 'morning-pages', label: 'Morning pages', emoji: '📝', type: 'number', unit: 'min', step: 5 },
+  { key: 'morning-pages', label: 'Journal',        emoji: '📝', type: 'number', unit: 'min', step: 5 },
   { key: 'workout',       label: 'Workout',       emoji: '💪', type: 'tristate' },
   { key: 'skincare',      label: 'Skincare',      emoji: '🧴', type: 'combo', layout: 'row', fields: [
       { key: 'skincare-am', label: 'AM', short: 'AM', type: 'boolean' },
@@ -847,14 +845,14 @@ const HABITS_META = [
       { key: 'calories',     label: 'Calories',     short: 'Cal',  type: 'number', unit: 'kcal', step: 10, noStepper: true },
       { key: 'supplements',  label: 'Supplements',  short: 'Supp', type: 'boolean' },
     ] },
-  { key: 'ebay-listings', label: 'eBay listings', emoji: '📦', type: 'number', unit: '', step: 1 },
+  { key: 'ebay-listings', label: 'eBay',           emoji: '📦', type: 'number', unit: '', step: 1 },
   { key: 'dog',           label: 'Dog',           emoji: '🐶', type: 'combo', fields: [
       { key: 'dog-walk-1',  label: 'Walk 1',  short: 'W1', type: 'number', unit: 'min', step: 5 },
       { key: 'dog-walk-2',  label: 'Walk 2',  short: 'W2', type: 'number', unit: 'min', step: 5 },
       { key: 'dog-training', label: 'Training', short: 'Tr', type: 'number', unit: 'min', step: 5 },
     ] },
   { key: 'bedtime',       label: 'Bedtime',       emoji: '🌙', type: 'time' },
-  { key: 'day-rating',    label: 'Day rating',    emoji: '⭐', type: 'rating' },
+  { key: 'day-rating',    label: 'Score',         emoji: '⭐', type: 'rating' },
 ];
 
 // Local calendar date (phone's own timezone) as YYYY-MM-DD. Deliberately not
@@ -966,54 +964,44 @@ window.sizeGrid = sizeGrid;
 // Combo tiles show a short growing summary of whichever sub-fields are
 // already logged (e.g. "AM" then "AM · PM") so progress is visible at a
 // glance, same idea as Wake-up showing its time or Morning pages its number.
-function displayValue(h) {
-  if (h.type === 'combo') {
-    const parts = h.fields
-      .map(f => {
-        const v = values[f.key];
-        if (v === undefined || v === '' || v === null) return null;
-        if (f.type === 'boolean') return v === 'TRUE' ? (f.short || f.label) : null;
-        return (f.short || f.label) + ' ' + v;
-      })
-      .filter(Boolean);
-    return parts.join(' · ');
-  }
-  const v = values[h.key];
-  if (v !== undefined && v !== '' && v !== null) {
-    if (h.type === 'boolean') return v === 'TRUE' ? 'Done' : 'Not done';
-    if (h.type === 'tristate') return v === 'TRUE' ? 'Done' : v === 'REST' ? 'Rest day' : 'Not done';
-    return String(v);
-  }
-  return '';
+// Progress, 0-1, for a single field (a top-level habit, or one sub-field
+// of a combo). Boolean/tristate/time are binary — logged at all = done.
+// Rating is value/10. Numbers are actual/target, capped at 1 either way
+// (a "lower is better" habit like Calories fills as you use your budget,
+// same as any other — going over just stays capped at 100%, not overflow).
+function fieldProgress(meta) {
+  const v = values[meta.key];
+  if (v === undefined || v === '' || v === null) return 0;
+  if (meta.type === 'boolean') return v === 'TRUE' ? 1 : 0;
+  if (meta.type === 'tristate') return (v === 'TRUE' || v === 'REST') ? 1 : 0;
+  if (meta.type === 'time') return 1;
+  if (meta.type === 'rating') return Math.min(1, parseFloat(v) / 10);
+  const actual = parseFloat(v);
+  if (isNaN(actual)) return 0;
+  const target = parseFloat(targets[meta.key]);
+  if (!target || target <= 0) return actual > 0 ? 1 : 0;
+  return Math.min(1, actual / target);
 }
 
-function isLogged(h) {
+// Combo tiles average their sub-fields' progress.
+function habitProgress(h) {
   if (h.type === 'combo') {
-    return h.fields.every(f => {
-      const v = values[f.key];
-      return v !== undefined && v !== '' && v !== null;
-    });
+    const fracs = h.fields.map(fieldProgress);
+    return fracs.reduce((a, b) => a + b, 0) / fracs.length;
   }
-  const v = values[h.key];
-  return v !== undefined && v !== '' && v !== null;
+  return fieldProgress(h);
 }
 
 function updateTileStates() {
   document.querySelectorAll('.tile').forEach(tile => {
     const key = tile.dataset.key;
     const meta = TILE_HABITS.find(h => h.key === key);
-    tile.classList.toggle('logged', isLogged(meta));
-    const value = displayValue(meta);
-    // Combo tiles turn their value text green as soon as any sub-field is
-    // logged, not just once every sub-field is (that's what the checkmark
-    // badge/full tile colour is for) — lets progress show incrementally.
-    const valueClass = 'tile-value' + (meta.type === 'combo' && value ? ' combo-progress' : '');
+    const progress = habitProgress(meta);
+    tile.classList.toggle('logged', progress >= 1);
     tile.innerHTML =
-      '<div class="tile-check">✓</div>' +
       '<div class="tile-label">' + meta.label + '</div>' +
       '<div class="tile-emoji">' + meta.emoji + '</div>' +
-      (value ? '<div><div class="' + valueClass + '">' + value + '</div>' +
-        (meta.unit ? '<div class="tile-unit">' + meta.unit + '</div>' : '') + '</div>' : '');
+      '<div class="tile-bar-track"><div class="tile-bar-fill" style="width:' + Math.round(progress * 100) + '%"></div></div>';
   });
 }
 
