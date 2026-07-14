@@ -605,7 +605,8 @@ main {
   display: flex; justify-content: center; gap: 6px; margin-top: 12px; flex-shrink: 0;
 }
 .rating-circle {
-  width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--border);
+  width: var(--rating-size, 30px); height: var(--rating-size, 30px); border-radius: 50%;
+  border: 1.5px solid var(--border);
   background: var(--card); font-size: 12px; font-weight: 700; color: var(--muted);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   flex-shrink: 0; transition: all .12s; -webkit-user-select: none; user-select: none;
@@ -872,12 +873,21 @@ function sizeGrid() {
   const mainCs = getComputedStyle(main);
   const padY = parseFloat(mainCs.paddingTop) + parseFloat(mainCs.paddingBottom);
   const availW = main.clientWidth - parseFloat(mainCs.paddingLeft) - parseFloat(mainCs.paddingRight);
-  const stripH = strip.getBoundingClientRect().height + parseFloat(getComputedStyle(strip).marginTop);
+
+  // Rating circles are computed from width first (10 across, same gap logic
+  // as the tile grid) rather than left at a fixed CSS size — that's what let
+  // the strip overflow past the bottom of the screen on some devices before,
+  // since a fixed-size element can't shrink to make room like the tiles do.
+  const ratingGap = parseFloat(getComputedStyle(strip).gap) || 6;
+  const ratingSize = Math.max(22, Math.floor((availW - ratingGap * 9) / 10));
+  strip.style.setProperty('--rating-size', ratingSize + 'px');
+
+  const stripH = ratingSize + parseFloat(getComputedStyle(strip).marginTop);
   const targetLabelH = targetLabel.getBoundingClientRect().height + parseFloat(getComputedStyle(targetLabel).marginTop);
   const availH = main.clientHeight - padY - stripH - targetLabelH;
   const sizeByWidth = (availW - gap * (cols - 1)) / cols;
   const sizeByHeight = (availH - gap * (rows - 1)) / rows;
-  const size = Math.max(40, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
+  const size = Math.max(30, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
   grid.style.setProperty('--tile-size', size + 'px');
   grid.style.gridTemplateColumns = 'repeat(' + cols + ', ' + size + 'px)';
 }
