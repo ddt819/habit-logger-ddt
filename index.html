@@ -460,6 +460,49 @@ function doGet(e) {
     });
     return ContentService.createTextOutput(JSON.stringify(targets)).setMimeType(ContentService.MimeType.JSON);
   }
+
+  // ?today=1&secret=... returns whatever's actually been logged for a given
+  // date (defaults to today, or pass &date=YYYY-MM-DD) as app-key JSON — this
+  // is what powers the one-way Sheet -> Obsidian frontmatter sync, since the
+  // Sheet stays the single source of truth regardless of whether an entry
+  // came from the phone app or from Claude logging on Drew's behalf.
+  if (e && e.parameter && e.parameter.today) {
+    if (e.parameter.secret !== SECRET) {
+      return ContentService.createTextOutput(JSON.stringify({ error: 'unauthorized' })).setMimeType(ContentService.MimeType.JSON);
+    }
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName('Log');
+    const tz = Session.getScriptTimeZone();
+    const values = sheet.getDataRange().getValues();
+    const headerRow = values[0];
+    const targetDate = e.parameter.date || Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+
+    let row = null;
+    for (let i = LOG_DATA_START_ROW - 1; i < values.length; i++) {
+      const cellDate = values[i][0];
+      if (cellDate instanceof Date && Utilities.formatDate(cellDate, tz, 'yyyy-MM-dd') === targetDate) {
+        row = values[i];
+        break;
+      }
+    }
+
+    const out = { date: targetDate };
+    if (row) {
+      Object.keys(KEY_MAP).forEach(appKey => {
+        const label = KEY_MAP[appKey];
+        const colIdx = headerRow.indexOf(label);
+        if (colIdx === -1) return;
+        let val = row[colIdx];
+        if (val === '' || val === null || val === undefined) return;
+        if (val === '✔') val = 'TRUE';
+        else if (val === '✘') val = 'FALSE';
+        else if (val instanceof Date) val = Utilities.formatDate(val, tz, 'HH:mm');
+        out[appKey] = val;
+      });
+    }
+    return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+  }
+
   return ContentService.createTextOutput('Habit Logger active');
 }
 
@@ -468,7 +511,7 @@ function doGet(e) {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Habits">
@@ -489,7 +532,7 @@ function doGet(e) {
   --safe-bottom: env(safe-area-inset-bottom, 16px);
   --grid-cols: 3;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -557,6 +600,30 @@ main {
 }
 .tile.logged .tile-check { display: flex; }
 
+/* Day rating — a row of circles instead of a tile, direct tap to select */
+#rating-strip {
+  display: flex; justify-content: center; gap: 6px; margin-top: 12px; flex-shrink: 0;
+}
+.rating-circle {
+  width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--border);
+  background: var(--card); font-size: 12px; font-weight: 700; color: var(--muted);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  flex-shrink: 0; transition: all .12s; -webkit-user-select: none; user-select: none;
+}
+.rating-circle:active { transform: scale(.9); }
+.rating-circle.selected { background: var(--green); color: white; border-color: var(--green); }
+.rating-circle.target-mark { color: var(--target-color); }
+#rating-target {
+  text-align: center; font-size: 11.5px; color: var(--muted); margin-top: 6px;
+  cursor: pointer; flex-shrink: 0;
+}
+#rating-target .edit-hint { text-decoration: underline; }
+#rating-target input {
+  font-family: var(--font); font-size: 13px; font-weight: 700; text-align: center;
+  border: none; border-bottom: 2px solid var(--green); outline: none; width: 50px;
+  background: transparent; color: var(--text);
+}
+
 /* Log sheet — tap a tile to open, enter a value, Save locks it */
 #log-sheet {
   position: fixed; inset: 0; z-index: 200;
@@ -606,14 +673,6 @@ main {
   background: white; font-size: 16px; font-weight: 700; color: var(--text); cursor: pointer;
 }
 .log-bool-btn.selected { background: var(--green); color: white; border-color: var(--green); }
-
-.log-rating-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; }
-.log-rating-btn {
-  aspect-ratio: 1 / 1; border-radius: 10px; border: 1.5px solid var(--border);
-  background: white; font-size: 15px; font-weight: 700; color: var(--muted); cursor: pointer;
-}
-.log-rating-btn.selected { background: var(--green); color: white; border-color: var(--green); }
-.log-rating-btn.target-mark { color: var(--target-color); }
 
 /* Save bar */
 #save-bar {
@@ -665,6 +724,8 @@ main {
 
 <main>
   <div class="tile-grid" id="tile-grid"></div>
+  <div id="rating-strip"></div>
+  <div id="rating-target"></div>
 </main>
 
 <div id="save-bar">
@@ -713,24 +774,39 @@ const DEFAULT_TARGETS = {
 
 // Client-side mirror of the Apps Script HABITS list — drives tile rendering
 // and which control the log sheet shows. Keep in sync with the server list.
+// Order is deliberate: chronological through the day, wake-up/bedtime bookend
+// the grid, and cumulative/uncertain-until-later habits (steps, water,
+// calories, supplements, eBay listings, audiobooks) sit in the back half
+// since you only know where they'll land as the day unfolds.
 const HABITS_META = [
   { key: 'wake-time',      label: 'Wake-up',        type: 'time',    section: 'health' },
   { key: 'sleep-hours',    label: 'Sleep',          type: 'number',  unit: 'hrs',  step: 0.25, section: 'health' },
-  { key: 'steps',          label: 'Steps',          type: 'number',  unit: 'steps', step: 100, section: 'health' },
-  { key: 'workout',        label: 'Workout',        type: 'boolean', section: 'health' },
-  { key: 'calories',       label: 'Calories',       type: 'number',  unit: 'kcal', step: 10, section: 'health' },
-  { key: 'water',          label: 'Water',          type: 'number',  unit: 'L',    step: 0.1, section: 'health' },
-  { key: 'supplements',    label: 'Supplements',    type: 'boolean', section: 'health' },
-  { key: 'bedtime',        label: 'Bedtime',        type: 'time',    section: 'health' },
   { key: 'morning-pages',  label: 'Morning pages',  type: 'number',  unit: 'min', step: 5, section: 'creative' },
+  { key: 'workout',        label: 'Workout',        type: 'boolean', section: 'health' },
+  { key: 'skincare-am',    label: 'Skincare AM',    type: 'boolean', section: 'daily' },
   { key: 'writing',        label: 'Writing',        type: 'number',  unit: 'min', step: 5, section: 'creative' },
   { key: 'reading',        label: 'Reading',        type: 'number',  unit: 'min', step: 5, section: 'creative' },
-  { key: 'audiobooks',     label: 'Audiobooks',     type: 'number',  unit: 'min', step: 5, section: 'creative' },
+  { key: 'steps',          label: 'Steps',          type: 'number',  unit: 'steps', step: 100, section: 'health' },
+  { key: 'water',          label: 'Water',          type: 'number',  unit: 'L',    step: 0.25, section: 'health' },
+  { key: 'calories',       label: 'Calories',       type: 'number',  unit: 'kcal', step: 10, section: 'health' },
+  { key: 'supplements',    label: 'Supplements',    type: 'boolean', section: 'health' },
   { key: 'ebay-listings',  label: 'eBay listings',  type: 'number',  unit: '',    step: 1, section: 'daily' },
-  { key: 'skincare-am',    label: 'Skincare AM',    type: 'boolean', section: 'daily' },
+  { key: 'audiobooks',     label: 'Audiobooks',     type: 'number',  unit: 'min', step: 5, section: 'creative' },
   { key: 'skincare-pm',    label: 'Skincare PM',    type: 'boolean', section: 'daily' },
+  { key: 'bedtime',        label: 'Bedtime',        type: 'time',    section: 'health' },
   { key: 'day-rating',     label: 'Day rating',     type: 'rating',  section: 'daily' },
 ];
+
+// Local calendar date (phone's own timezone) as YYYY-MM-DD. Deliberately not
+// toISOString(), which returns the UTC date — that would roll "today" over
+// at UTC midnight (~10-11am in Sydney) instead of actual local midnight.
+function localDateStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
 
 let targets = loadTargets();
 let values = {};       // today's entered values, keyed same as HABITS_META
@@ -739,7 +815,7 @@ let pendingValue = null; // value the log sheet control currently holds, applied
 
 // ── Init ───────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('date-input').value = new Date().toISOString().slice(0,10);
+  document.getElementById('date-input').value = localDateStr();
 
   loadDraft();
   renderTiles();
@@ -764,40 +840,41 @@ function getGridCols() {
   return v || 3;
 }
 
+const TILE_HABITS = HABITS_META.filter(h => h.type !== 'rating');
+
 function renderTiles() {
   const grid = document.getElementById('tile-grid');
   grid.innerHTML = '';
-  HABITS_META.forEach(h => {
+  TILE_HABITS.forEach(h => {
     const tile = document.createElement('div');
     tile.className = 'tile';
     tile.dataset.key = h.key;
-    tile.innerHTML =
-      '<div class="tile-check">✓</div>' +
-      '<div class="tile-label">' + h.label + '</div>' +
-      '<div>' +
-        '<div class="tile-value"></div>' +
-        (h.unit ? '<div class="tile-unit">' + h.unit + '</div>' : '') +
-      '</div>';
     tile.addEventListener('click', () => openLogSheet(h.key));
     grid.appendChild(tile);
   });
+  renderRatingStrip();
   updateTileStates();
 }
 
 // Computes the largest square tile size that makes the whole grid fit the
 // screen exactly (width AND height) on whatever device this loads on, so
-// there is never a scrollbar and never leftover dead space.
+// there is never a scrollbar and never leftover dead space. Reserves
+// whatever space the rating strip actually takes up below the grid first.
 function sizeGrid() {
   const main = document.querySelector('main');
   const grid = document.getElementById('tile-grid');
+  const strip = document.getElementById('rating-strip');
+  const targetLabel = document.getElementById('rating-target');
   const cols = getGridCols();
-  const count = HABITS_META.length;
+  const count = TILE_HABITS.length;
   const rows = Math.ceil(count / cols);
   const gap = parseFloat(getComputedStyle(grid).columnGap) || 9;
   const mainCs = getComputedStyle(main);
   const padY = parseFloat(mainCs.paddingTop) + parseFloat(mainCs.paddingBottom);
   const availW = main.clientWidth - parseFloat(mainCs.paddingLeft) - parseFloat(mainCs.paddingRight);
-  const availH = main.clientHeight - padY;
+  const stripH = strip.getBoundingClientRect().height + parseFloat(getComputedStyle(strip).marginTop);
+  const targetLabelH = targetLabel.getBoundingClientRect().height + parseFloat(getComputedStyle(targetLabel).marginTop);
+  const availH = main.clientHeight - padY - stripH - targetLabelH;
   const sizeByWidth = (availW - gap * (cols - 1)) / cols;
   const sizeByHeight = (availH - gap * (rows - 1)) / rows;
   const size = Math.max(40, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
@@ -806,24 +883,88 @@ function sizeGrid() {
 }
 window.sizeGrid = sizeGrid;
 
+// Targets only ever show inside the log sheet, not on the tile itself —
+// the tile face is blank until logged, then shows the entered value.
 function displayValue(h) {
   const v = values[h.key];
   if (v !== undefined && v !== '' && v !== null) {
     if (h.type === 'boolean') return v === 'TRUE' ? 'Done' : 'Not done';
     return String(v);
   }
-  const t = targets[h.key];
-  return t ? '/ ' + t : '—';
+  return '';
 }
 
 function updateTileStates() {
   document.querySelectorAll('.tile').forEach(tile => {
     const key = tile.dataset.key;
-    const meta = HABITS_META.find(h => h.key === key);
+    const meta = TILE_HABITS.find(h => h.key === key);
     const v = values[key];
     const logged = v !== undefined && v !== '' && v !== null;
     tile.classList.toggle('logged', logged);
-    tile.querySelector('.tile-value').textContent = displayValue(meta);
+    const value = displayValue(meta);
+    tile.innerHTML =
+      '<div class="tile-check">✓</div>' +
+      '<div class="tile-label">' + meta.label + '</div>' +
+      (value ? '<div><div class="tile-value">' + value + '</div>' +
+        (meta.unit ? '<div class="tile-unit">' + meta.unit + '</div>' : '') + '</div>' : '');
+  });
+  updateRatingStrip();
+}
+
+// ── Day rating strip ────────────────────────────────────
+function renderRatingStrip() {
+  const strip = document.getElementById('rating-strip');
+  strip.innerHTML = '';
+  for (let i = 1; i <= 10; i++) {
+    const btn = document.createElement('div');
+    btn.className = 'rating-circle';
+    btn.textContent = i;
+    btn.dataset.val = i;
+    btn.addEventListener('click', () => selectDayRating(i));
+    strip.appendChild(btn);
+  }
+  document.getElementById('rating-target').addEventListener('click', startEditRatingTarget);
+  renderRatingTargetLabel();
+}
+
+function updateRatingStrip() {
+  const val = values['day-rating'];
+  const target = targets['day-rating'];
+  document.querySelectorAll('.rating-circle').forEach(btn => {
+    const v = btn.dataset.val;
+    const selected = String(val) === v;
+    btn.classList.toggle('selected', selected);
+    btn.classList.toggle('target-mark', !selected && String(target) === v);
+  });
+}
+
+function selectDayRating(i) {
+  values['day-rating'] = i;
+  saveDraft();
+  saveField('day-rating', i);
+  updateRatingStrip();
+}
+
+function renderRatingTargetLabel() {
+  const el = document.getElementById('rating-target');
+  const t = targets['day-rating'];
+  el.innerHTML = 'Target: ' + (t || '—') + ' <span class="edit-hint">Edit</span>';
+}
+
+function startEditRatingTarget(e) {
+  e.stopPropagation();
+  const el = document.getElementById('rating-target');
+  if (document.getElementById('rating-target-input')) return; // already editing
+  el.innerHTML = '<input type="text" inputmode="decimal" id="rating-target-input">';
+  const input = document.getElementById('rating-target-input');
+  input.value = targets['day-rating'] || '';
+  input.focus();
+  input.addEventListener('blur', () => {
+    const val = input.value.trim();
+    if (val) { targets['day-rating'] = val; saveTargets(); }
+    renderRatingTargetLabel();
+    updateRatingStrip();
+    sizeGrid();
   });
 }
 
@@ -892,7 +1033,9 @@ function openLogSheet(key) {
       '</div>';
     const input = document.getElementById('log-num-input');
     input.value = pendingValue;
-    const decimals = meta.step < 1 ? 1 : 0;
+    const stepStr = String(meta.step);
+    const dotIdx = stepStr.indexOf('.');
+    const decimals = dotIdx === -1 ? 0 : stepStr.length - dotIdx - 1;
     const step = (delta) => {
       const cur = parseFloat(input.value || '0') || 0;
       input.value = (cur + delta).toFixed(decimals);
@@ -902,7 +1045,7 @@ function openLogSheet(key) {
     document.getElementById('log-inc').addEventListener('click', () => step(meta.step));
     input.addEventListener('input', () => pendingValue = input.value);
   } else if (meta.type === 'time') {
-    control.innerHTML = '<input type="time" id="log-time-input">';
+    control.innerHTML = '<input type="time" id="log-time-input" step="600">';
     const input = document.getElementById('log-time-input');
     input.value = pendingValue;
     input.addEventListener('input', () => pendingValue = input.value);
@@ -922,23 +1065,6 @@ function openLogSheet(key) {
         pendingValue = btn.dataset.val;
       });
     });
-  } else if (meta.type === 'rating') {
-    const grid = document.createElement('div');
-    grid.className = 'log-rating-grid';
-    for (let i = 1; i <= 10; i++) {
-      const btn = document.createElement('button');
-      const isTarget = String(i) === targets['day-rating'];
-      const isSelected = String(pendingValue) === String(i);
-      btn.className = 'log-rating-btn' + (isTarget && !isSelected ? ' target-mark' : '') + (isSelected ? ' selected' : '');
-      btn.textContent = i;
-      btn.addEventListener('click', () => {
-        grid.querySelectorAll('.log-rating-btn').forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        pendingValue = i;
-      });
-      grid.appendChild(btn);
-    }
-    control.appendChild(grid);
   }
 
   document.getElementById('log-sheet').classList.add('open');
@@ -975,7 +1101,7 @@ function loadDraft() {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return;
     const d = JSON.parse(raw);
-    const today = new Date().toISOString().slice(0,10);
+    const today = localDateStr();
     if (d['Date'] && d['Date'] !== today) return;
     values = { ...d };
     delete values['Date'];
