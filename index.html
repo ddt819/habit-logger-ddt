@@ -594,8 +594,8 @@ body {
 .draft-badge.show { display: inline-block; }
 
 main {
-  padding: 10px 10px 6px; max-width: 480px; margin: 0 auto;
-  display: flex; flex-direction: column; justify-content: center;
+  padding: 6px 10px 4px; max-width: 480px; margin: 0 auto;
+  display: flex; flex-direction: column; justify-content: flex-start;
   flex: 1; min-height: 0; overflow: hidden; width: 100%;
 }
 
@@ -630,7 +630,7 @@ main {
 
 /* Day rating — a row of circles instead of a tile, direct tap to select */
 #rating-strip {
-  display: flex; justify-content: center; gap: var(--rating-gap-size, 6px); margin-top: 12px; flex-shrink: 0;
+  display: flex; justify-content: center; gap: var(--rating-gap-size, 6px); margin-top: 8px; flex-shrink: 0;
 }
 .rating-circle {
   width: var(--rating-size, 30px); height: var(--rating-size, 30px); border-radius: 50%;
@@ -1006,7 +1006,11 @@ function sizeGrid() {
 
   const stripH = ratingSize + parseFloat(getComputedStyle(strip).marginTop);
   const targetLabelH = targetLabel.getBoundingClientRect().height + parseFloat(getComputedStyle(targetLabel).marginTop);
-  const availH = totalAvail - stripH - targetLabelH;
+  // Extra safety margin so tiles land a touch smaller than a razor-tight
+  // fit — guarantees clear breathing room above the save bar instead of
+  // sitting right on the edge of it.
+  const SAFETY_MARGIN = 18;
+  const availH = totalAvail - stripH - targetLabelH - SAFETY_MARGIN;
   const sizeByWidth = (availW - tileGap * (cols - 1)) / cols;
   const sizeByHeight = (availH - tileGap * (rows - 1)) / rows;
   const tileSize = Math.max(30, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
