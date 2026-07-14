@@ -552,6 +552,34 @@ body {
   text-align: center;
 }
 #header h1 { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
+#adjust-btn {
+  position: absolute; top: 12px; right: 14px; width: 30px; height: 30px;
+  border-radius: 50%; border: 1px solid var(--border); background: white;
+  font-size: 15px; color: var(--muted); cursor: pointer;
+}
+#adjust-btn:active { background: #f3f4f6; }
+
+/* Adjust panel */
+#adjust-sheet {
+  position: fixed; inset: 0; z-index: 300;
+  display: none; align-items: flex-end; justify-content: center;
+  background: rgba(0,0,0,.4);
+}
+#adjust-sheet.open { display: flex; }
+#adjust-panel {
+  background: white; border-radius: 20px 20px 0 0;
+  padding: 20px 20px calc(20px + var(--safe-bottom));
+  width: 100%; max-width: 480px;
+}
+#adjust-panel h3 { font-size: 16px; font-weight: 800; margin-bottom: 16px; text-align: center; }
+.adj-row { margin-bottom: 16px; }
+.adj-label {
+  display: flex; justify-content: space-between; font-size: 13px; font-weight: 600;
+  color: var(--text); margin-bottom: 6px;
+}
+.adj-val { color: var(--green); font-weight: 700; font-variant-numeric: tabular-nums; }
+.adj-row input[type=range] { width: 100%; accent-color: var(--green); }
+#adjust-panel-btns { display: flex; gap: 8px; margin-top: 4px; }
 #date-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; }
 #date-input {
   font-family: var(--font); font-size: 14px; font-weight: 600;
@@ -576,7 +604,7 @@ main {
    whatever screen height/width is actually available, so the whole grid
    always fills the screen edge-to-edge with no scrolling, on any device. */
 .tile-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--tile-gap-size, 9px);
   justify-content: center; align-content: center;
 }
 .tile {
@@ -602,7 +630,7 @@ main {
 
 /* Day rating — a row of circles instead of a tile, direct tap to select */
 #rating-strip {
-  display: flex; justify-content: center; gap: 6px; margin-top: 12px; flex-shrink: 0;
+  display: flex; justify-content: center; gap: var(--rating-gap-size, 6px); margin-top: 12px; flex-shrink: 0;
 }
 .rating-circle {
   width: var(--rating-size, 30px); height: var(--rating-size, 30px); border-radius: 50%;
@@ -716,10 +744,40 @@ main {
 <body>
 
 <div id="header">
+  <button id="adjust-btn" aria-label="Adjust sizing">⚙</button>
   <h1>Habits</h1>
   <div id="date-row">
     <input type="date" id="date-input">
     <span class="draft-badge" id="draft-badge">Draft saved</span>
+  </div>
+</div>
+
+<!-- Adjust panel — drag these directly on your own phone to fine-tune
+     sizing; no more guessing at pixel math from a screenshot. Values are
+     saved to this phone's localStorage and persist across reloads. -->
+<div id="adjust-sheet">
+  <div id="adjust-panel">
+    <h3>Adjust sizing</h3>
+    <div class="adj-row">
+      <div class="adj-label"><span>Tile size</span><span class="adj-val" id="adj-val-tile"></span></div>
+      <input type="range" id="adj-tile" min="50" max="140" step="1">
+    </div>
+    <div class="adj-row">
+      <div class="adj-label"><span>Tile gap</span><span class="adj-val" id="adj-val-tilegap"></span></div>
+      <input type="range" id="adj-tilegap" min="2" max="20" step="1">
+    </div>
+    <div class="adj-row">
+      <div class="adj-label"><span>Rating circle size</span><span class="adj-val" id="adj-val-rating"></span></div>
+      <input type="range" id="adj-rating" min="18" max="44" step="1">
+    </div>
+    <div class="adj-row">
+      <div class="adj-label"><span>Rating gap</span><span class="adj-val" id="adj-val-ratinggap"></span></div>
+      <input type="range" id="adj-ratinggap" min="2" max="16" step="1">
+    </div>
+    <div id="adjust-panel-btns">
+      <button class="tpbtn" id="adjust-reset">Reset to auto-fit</button>
+      <button class="tpbtn confirm" id="adjust-done">Done</button>
+    </div>
   </div>
 </div>
 
@@ -833,6 +891,28 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('log-target-input').addEventListener('blur', confirmEditTarget);
 
   document.getElementById('save-btn').addEventListener('click', saveToSheets);
+
+  document.getElementById('adjust-btn').addEventListener('click', openAdjustPanel);
+  document.getElementById('adjust-sheet').addEventListener('click', e => {
+    if (e.target === document.getElementById('adjust-sheet')) closeAdjustPanel();
+  });
+  document.getElementById('adjust-done').addEventListener('click', () => {
+    saveManualSizing({
+      tileSize: parseInt(document.getElementById('adj-tile').value, 10),
+      tileGap: parseInt(document.getElementById('adj-tilegap').value, 10),
+      ratingSize: parseInt(document.getElementById('adj-rating').value, 10),
+      ratingGap: parseInt(document.getElementById('adj-ratinggap').value, 10),
+    });
+    closeAdjustPanel();
+  });
+  document.getElementById('adjust-reset').addEventListener('click', () => {
+    clearManualSizing();
+    sizeGrid();
+    openAdjustPanel();
+  });
+  ['adj-tile', 'adj-tilegap', 'adj-rating', 'adj-ratinggap'].forEach(id => {
+    document.getElementById(id).addEventListener('input', liveApplyFromSliders);
+  });
 });
 
 // ── Tiles ──────────────────────────────────────────────
@@ -861,7 +941,44 @@ function renderTiles() {
 // screen exactly (width AND height) on whatever device this loads on, so
 // there is never a scrollbar and never leftover dead space. Reserves
 // whatever space the rating strip actually takes up below the grid first.
+// ── Manual sizing override ──────────────────────────────
+// Auto-fit math is a best guess at layout it can't actually see rendering
+// on your device. If it's ever off, use the ⚙ Adjust panel to drag it
+// right by hand — those values are saved here and take over completely,
+// skipping the auto calculation below until you hit "Reset to auto-fit".
+const MANUAL_SIZE_KEY = 'habit-logger-manual-sizing';
+
+function loadManualSizing() {
+  try {
+    const raw = localStorage.getItem(MANUAL_SIZE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function saveManualSizing(vals) {
+  localStorage.setItem(MANUAL_SIZE_KEY, JSON.stringify(vals));
+}
+function clearManualSizing() {
+  localStorage.removeItem(MANUAL_SIZE_KEY);
+}
+
+function applySizing(tileSize, tileGap, ratingSize, ratingGap) {
+  const grid = document.getElementById('tile-grid');
+  const strip = document.getElementById('rating-strip');
+  const cols = getGridCols();
+  grid.style.setProperty('--tile-gap-size', tileGap + 'px');
+  grid.style.setProperty('--tile-size', tileSize + 'px');
+  grid.style.gridTemplateColumns = 'repeat(' + cols + ', ' + tileSize + 'px)';
+  strip.style.setProperty('--rating-gap-size', ratingGap + 'px');
+  strip.style.setProperty('--rating-size', ratingSize + 'px');
+}
+
 function sizeGrid() {
+  const manual = loadManualSizing();
+  if (manual) {
+    applySizing(manual.tileSize, manual.tileGap, manual.ratingSize, manual.ratingGap);
+    return;
+  }
+
   const header = document.getElementById('header');
   const saveBar = document.getElementById('save-bar');
   const main = document.querySelector('main');
@@ -869,43 +986,74 @@ function sizeGrid() {
   const strip = document.getElementById('rating-strip');
   const targetLabel = document.getElementById('rating-target');
 
-  // Reserve exactly the save bar's real rendered height (it was a static
-  // 90px guess before, which didn't match reality and let main's box run
-  // taller than the visible gap above the save bar).
+  // Reserve exactly the save bar's real rendered height (a static 90px
+  // guess didn't match reality and let main's box run taller than the
+  // visible gap above the save bar).
   document.body.style.paddingBottom = saveBar.getBoundingClientRect().height + 'px';
 
   const cols = getGridCols();
   const count = TILE_HABITS.length;
   const rows = Math.ceil(count / cols);
-  const gap = parseFloat(getComputedStyle(grid).columnGap) || 9;
+  const tileGap = parseFloat(getComputedStyle(grid).columnGap) || 9;
   const mainCs = getComputedStyle(main);
   const availW = main.clientWidth - parseFloat(mainCs.paddingLeft) - parseFloat(mainCs.paddingRight);
 
-  // Rating circles are computed from width first (10 across, same gap logic
-  // as the tile grid) rather than left at a fixed CSS size — a fixed-size
-  // element can't shrink to make room the way the tiles do.
   const ratingGap = parseFloat(getComputedStyle(strip).gap) || 6;
   const ratingSize = Math.max(22, Math.floor((availW - ratingGap * 9) / 10));
-  strip.style.setProperty('--rating-size', ratingSize + 'px');
 
-  // Measure the real, currently-rendered gap between the header and the
-  // fixed save bar directly, rather than trusting body's padding-bottom to
-  // match the save bar's actual height — that guess was off, which let
-  // content render underneath the (visually opaque, fixed-position) save
-  // bar even though it was technically still inside main's own box.
   const padY = parseFloat(mainCs.paddingTop) + parseFloat(mainCs.paddingBottom);
   const totalAvail = saveBar.getBoundingClientRect().top - header.getBoundingClientRect().bottom - padY;
 
   const stripH = ratingSize + parseFloat(getComputedStyle(strip).marginTop);
   const targetLabelH = targetLabel.getBoundingClientRect().height + parseFloat(getComputedStyle(targetLabel).marginTop);
   const availH = totalAvail - stripH - targetLabelH;
-  const sizeByWidth = (availW - gap * (cols - 1)) / cols;
-  const sizeByHeight = (availH - gap * (rows - 1)) / rows;
-  const size = Math.max(30, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
-  grid.style.setProperty('--tile-size', size + 'px');
-  grid.style.gridTemplateColumns = 'repeat(' + cols + ', ' + size + 'px)';
+  const sizeByWidth = (availW - tileGap * (cols - 1)) / cols;
+  const sizeByHeight = (availH - tileGap * (rows - 1)) / rows;
+  const tileSize = Math.max(30, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
+
+  applySizing(tileSize, tileGap, ratingSize, ratingGap);
 }
 window.sizeGrid = sizeGrid;
+
+// ── Adjust panel ─────────────────────────────────────────
+function currentSizingValues() {
+  const grid = document.getElementById('tile-grid');
+  const strip = document.getElementById('rating-strip');
+  const gridCs = getComputedStyle(grid);
+  const stripCs = getComputedStyle(strip);
+  return {
+    tileSize: Math.round(parseFloat(gridCs.getPropertyValue('--tile-size')) || 90),
+    tileGap: Math.round(parseFloat(gridCs.columnGap) || 9),
+    ratingSize: Math.round(parseFloat(stripCs.getPropertyValue('--rating-size')) || 30),
+    ratingGap: Math.round(parseFloat(stripCs.gap) || 6),
+  };
+}
+function setAdjSlider(id, val) {
+  document.getElementById('adj-' + id).value = val;
+  document.getElementById('adj-val-' + id).textContent = val + 'px';
+}
+function openAdjustPanel() {
+  const v = currentSizingValues();
+  setAdjSlider('tile', v.tileSize);
+  setAdjSlider('tilegap', v.tileGap);
+  setAdjSlider('rating', v.ratingSize);
+  setAdjSlider('ratinggap', v.ratingGap);
+  document.getElementById('adjust-sheet').classList.add('open');
+}
+function closeAdjustPanel() {
+  document.getElementById('adjust-sheet').classList.remove('open');
+}
+function liveApplyFromSliders() {
+  const tileSize = parseInt(document.getElementById('adj-tile').value, 10);
+  const tileGap = parseInt(document.getElementById('adj-tilegap').value, 10);
+  const ratingSize = parseInt(document.getElementById('adj-rating').value, 10);
+  const ratingGap = parseInt(document.getElementById('adj-ratinggap').value, 10);
+  applySizing(tileSize, tileGap, ratingSize, ratingGap);
+  document.getElementById('adj-val-tile').textContent = tileSize + 'px';
+  document.getElementById('adj-val-tilegap').textContent = tileGap + 'px';
+  document.getElementById('adj-val-rating').textContent = ratingSize + 'px';
+  document.getElementById('adj-val-ratinggap').textContent = ratingGap + 'px';
+}
 
 // Targets only ever show inside the log sheet, not on the tile itself —
 // the tile face is blank until logged, then shows the entered value.
