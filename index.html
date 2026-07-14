@@ -655,9 +655,13 @@ main {
 }
 #log-sheet.open { display: flex; }
 #log-panel {
-  background: white; border-radius: 20px 20px 0 0;
-  padding: 26px 22px calc(24px + var(--safe-bottom));
+  background: white; border-radius: 14px 14px 0 0;
+  padding: 10px 22px calc(24px + var(--safe-bottom));
   width: 100%; max-width: 480px;
+}
+#log-grabber {
+  width: 36px; height: 5px; border-radius: 3px; background: #d1d5db;
+  margin: 0 auto 18px;
 }
 #log-panel h3 { font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 4px; }
 #log-target-row {
@@ -670,7 +674,10 @@ main {
   border: none; border-bottom: 2px solid var(--green); outline: none; width: 100px; display: none;
   margin: 4px 0 24px;
 }
-#log-control { min-height: 90px; display: flex; align-items: center; justify-content: center; margin-bottom: 26px; }
+#log-control {
+  min-height: 90px; display: flex; flex-direction: column;
+  align-items: stretch; justify-content: center; margin-bottom: 26px;
+}
 
 .log-num-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
 .log-step-btn {
@@ -728,13 +735,17 @@ main {
 #toast.success { background: var(--green); }
 #toast.error { background: #dc2626; }
 
-#log-panel-btns { display: flex; justify-content: center; gap: 12px; margin-top: 6px; }
+/* iOS sheets pair a plain-text Cancel with one solid primary action,
+   not two equal-weight bordered buttons. */
+#log-panel-btns { display: flex; align-items: center; justify-content: center; gap: 20px; margin-top: 6px; }
 .tpbtn {
-  min-width: 120px; padding: 13px 22px; border-radius: 10px; border: 1px solid var(--border);
-  font-family: var(--font); font-size: 15px; font-weight: 700; cursor: pointer;
-  background: white;
+  padding: 14px 0; border: none; background: none;
+  font-family: var(--font); font-size: 16px; font-weight: 600; color: var(--muted); cursor: pointer;
 }
-.tpbtn.confirm { background: var(--green); color: white; border-color: var(--green); }
+.tpbtn.confirm {
+  min-width: 140px; padding: 14px 24px; border-radius: 10px;
+  background: var(--green); color: white; font-weight: 700;
+}
 </style>
 </head>
 <body>
@@ -759,6 +770,7 @@ main {
 <!-- Log sheet: tap a tile to open this, enter the value, Save locks the tile for the day -->
 <div id="log-sheet">
   <div id="log-panel">
+    <div id="log-grabber"></div>
     <h3 id="log-panel-title">Habit</h3>
     <div id="log-target-row">
       <span id="log-target-text"></span>
