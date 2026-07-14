@@ -612,8 +612,8 @@ main {
 
 /* Simple on/off toggle — green when done, red when not, used for every
    plain yes/no field instead of two separate Done/Not-done buttons. */
-.combo-toggle-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
-.combo-toggle-label { font-size: 15px; font-weight: 700; color: var(--text); min-width: 76px; text-align: right; }
+.combo-toggle-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.combo-toggle-state { font-size: 13px; font-weight: 700; color: var(--muted); }
 .combo-toggle-wrap { position: relative; width: 52px; height: 30px; flex-shrink: 0; display: block; }
 .combo-toggle-wrap input { opacity: 0; width: 0; height: 0; position: absolute; }
 .combo-toggle-track {
@@ -932,9 +932,10 @@ function sizeGrid() {
   const availH = totalAvail - SAFETY_MARGIN;
   const sizeByWidth = (availW - tileGap * (cols - 1)) / cols;
   const sizeByHeight = (availH - tileGap * (rows - 1)) / rows;
-  // 0.75 = tiles deliberately sized 25% smaller than a tight fit, per Drew's
-  // request — the grid no longer aims to fill every last pixel.
-  const tileSize = Math.max(24, Math.floor(Math.min(sizeByWidth, sizeByHeight) * 0.75));
+  // 0.9 = tiles deliberately sized 10% smaller than a tight fit, per Drew's
+  // request — the grid no longer aims to fill every last pixel (25% was too
+  // aggressive, 10% is the right amount of breathing room).
+  const tileSize = Math.max(24, Math.floor(Math.min(sizeByWidth, sizeByHeight) * 0.9));
 
   applySizing(tileSize, tileGap);
 }
@@ -1071,11 +1072,12 @@ function buildNumberControl(container, currentVal, unit, step, onChange, noStepp
 // Simple green/red on-off toggle for plain yes/no fields — replaces the
 // old two-button Done/Not-done row to save space and make it a one-tap flip.
 function buildBoolControl(container, currentVal, onChange) {
-  const row = document.createElement('div');
-  row.className = 'combo-toggle-row';
-  const label = document.createElement('span');
-  label.className = 'combo-toggle-label';
-  label.textContent = currentVal === 'TRUE' ? 'Done' : currentVal === 'FALSE' ? 'Not done' : '—';
+  // Stacked (state label above the switch, both centered) instead of side
+  // by side — a right-aligned label next to a fixed-width switch shifts
+  // the visual center depending on label length ("AM" vs "Supplements"),
+  // so rows never lined up consistently. Stacking sidesteps that entirely.
+  const col = document.createElement('div');
+  col.className = 'combo-toggle-col';
   const wrap = document.createElement('label');
   wrap.className = 'combo-toggle-wrap';
   const input = document.createElement('input');
@@ -1086,12 +1088,15 @@ function buildBoolControl(container, currentVal, onChange) {
   const thumb = document.createElement('div');
   thumb.className = 'combo-toggle-thumb';
   wrap.appendChild(input); wrap.appendChild(track); wrap.appendChild(thumb);
+  const state = document.createElement('div');
+  state.className = 'combo-toggle-state';
+  state.textContent = currentVal === 'TRUE' ? 'Done' : 'Not done';
   input.addEventListener('change', () => {
-    label.textContent = input.checked ? 'Done' : 'Not done';
+    state.textContent = input.checked ? 'Done' : 'Not done';
     onChange(input.checked ? 'TRUE' : 'FALSE');
   });
-  row.appendChild(label); row.appendChild(wrap);
-  container.appendChild(row);
+  col.appendChild(wrap); col.appendChild(state);
+  container.appendChild(col);
 }
 
 // Workout: Done / Rest day / Not done — a rest day is a planned day off,
