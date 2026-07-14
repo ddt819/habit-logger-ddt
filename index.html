@@ -561,46 +561,12 @@ body {
   text-align: center;
 }
 #header h1 { font-size: 19px; font-weight: 800; letter-spacing: -.02em; }
-#adjust-btn {
-  position: absolute; top: 12px; right: 14px; width: 30px; height: 30px;
-  border-radius: 50%; border: 1px solid var(--border); background: white;
-  font-size: 15px; color: var(--muted); cursor: pointer;
-}
-#adjust-btn:active { background: #f3f4f6; }
-
-/* Adjust panel */
-#adjust-sheet {
-  position: fixed; inset: 0; z-index: 300;
-  display: none; align-items: flex-end; justify-content: center;
-  background: rgba(0,0,0,.4);
-}
-#adjust-sheet.open { display: flex; }
-#adjust-panel {
-  background: white; border-radius: 20px 20px 0 0;
-  padding: 20px 20px calc(20px + var(--safe-bottom));
-  width: 100%; max-width: 480px;
-}
-#adjust-panel h3 { font-size: 16px; font-weight: 800; margin-bottom: 16px; text-align: center; }
-.adj-row { margin-bottom: 16px; }
-.adj-label {
-  display: flex; justify-content: space-between; font-size: 13px; font-weight: 600;
-  color: var(--text); margin-bottom: 6px;
-}
-.adj-val { color: var(--green); font-weight: 700; font-variant-numeric: tabular-nums; }
-.adj-row input[type=range] { width: 100%; accent-color: var(--green); }
-#adjust-panel-btns { display: flex; gap: 8px; margin-top: 4px; }
 #date-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; }
 #date-input {
   font-family: var(--font); font-size: 14px; font-weight: 600;
   color: var(--muted); border: none; background: transparent; outline: none;
   text-align: center;
 }
-.draft-badge {
-  font-size: 11px; font-weight: 700; color: var(--green);
-  background: var(--green-light); border: 1px solid var(--green-border);
-  border-radius: 20px; padding: 2px 8px; display: none;
-}
-.draft-badge.show { display: inline-block; }
 
 main {
   padding: 6px 10px 4px; max-width: 480px; margin: 0 auto;
@@ -626,10 +592,10 @@ main {
 }
 .tile:active { transform: scale(.96); background: #fafafa; }
 .tile.logged { background: var(--green-light); border-color: var(--green-border); }
-.tile-label { font-size: 11.5px; font-weight: 700; color: var(--text); line-height: 1.2; }
-.tile-value { font-size: 14.5px; font-weight: 800; color: var(--target-color); word-break: break-word; }
+.tile-label { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.2; }
+.tile-value { font-size: 18px; font-weight: 800; color: var(--target-color); word-break: break-word; }
 .tile.logged .tile-value { color: var(--green); }
-.tile-unit { font-size: 9.5px; font-weight: 600; color: var(--muted); }
+.tile-unit { font-size: 12px; font-weight: 600; color: var(--muted); }
 .tile-check {
   position: absolute; top: 7px; right: 7px; width: 17px; height: 17px; border-radius: 50%;
   background: var(--green); color: white; font-size: 10px; font-weight: 800;
@@ -640,24 +606,44 @@ main {
 .tile-emoji { font-size: 15px; line-height: 1; }
 
 /* Combo fields inside the log sheet — several sub-fields shown together */
-.combo-field { width: 100%; margin-bottom: 14px; }
+.combo-field { width: 100%; margin-bottom: 20px; }
 .combo-field:last-child { margin-bottom: 0; }
-.combo-field-label { font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 6px; }
-.combo-bool-row { display: flex; gap: 8px; width: 100%; }
+.combo-field-label { font-size: 13px; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 10px; }
+
+/* Simple on/off toggle — green when done, red when not, used for every
+   plain yes/no field instead of two separate Done/Not-done buttons. */
+.combo-toggle-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.combo-toggle-label { font-size: 15px; font-weight: 700; color: var(--text); min-width: 76px; text-align: right; }
+.combo-toggle-wrap { position: relative; width: 52px; height: 30px; flex-shrink: 0; display: block; }
+.combo-toggle-wrap input { opacity: 0; width: 0; height: 0; position: absolute; }
+.combo-toggle-track {
+  position: absolute; inset: 0; background: #e0596b; border-radius: 999px;
+  cursor: pointer; transition: background .2s;
+}
+.combo-toggle-wrap input:checked + .combo-toggle-track { background: var(--green); }
+.combo-toggle-thumb {
+  position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; background: white;
+  border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .2s; pointer-events: none;
+}
+.combo-toggle-wrap input:checked ~ .combo-toggle-thumb { transform: translateX(22px); }
+
+/* 3-way row (Workout: Done / Rest day / Not done) */
+.combo-bool-row { display: flex; gap: 10px; width: 100%; }
 .combo-bool-btn {
-  flex: 1; padding: 12px; border-radius: 10px; border: 1.5px solid var(--border);
+  flex: 1; padding: 14px 8px; border-radius: 10px; border: 1.5px solid var(--border);
   background: white; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer;
 }
 .combo-bool-btn.selected { background: var(--green); color: white; border-color: var(--green); }
-.combo-num-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
+
+.combo-num-row { display: flex; align-items: center; justify-content: center; gap: 16px; }
 .combo-step-btn {
-  width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--border); flex-shrink: 0;
-  background: white; font-size: 17px; font-weight: 700; color: var(--text); cursor: pointer;
+  width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--border); flex-shrink: 0;
+  background: white; font-size: 18px; font-weight: 700; color: var(--text); cursor: pointer;
 }
 .combo-step-btn:active { background: #f3f4f6; }
 .combo-num-input {
-  font-family: var(--font); font-size: 22px; font-weight: 800; text-align: center;
-  border: none; outline: none; width: 80px; color: var(--text);
+  font-family: var(--font); font-size: 24px; font-weight: 800; text-align: center;
+  border: none; outline: none; width: 90px; color: var(--text);
 }
 .combo-num-unit { font-size: 12px; color: var(--muted); font-weight: 600; }
 
@@ -670,32 +656,32 @@ main {
 #log-sheet.open { display: flex; }
 #log-panel {
   background: white; border-radius: 20px 20px 0 0;
-  padding: 22px 20px calc(20px + var(--safe-bottom));
+  padding: 26px 22px calc(24px + var(--safe-bottom));
   width: 100%; max-width: 480px;
 }
-#log-panel h3 { font-size: 17px; font-weight: 800; text-align: center; }
+#log-panel h3 { font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 4px; }
 #log-target-row {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  font-size: 13px; color: var(--muted); margin: 4px 0 20px; text-align: center;
+  font-size: 13px; color: var(--muted); margin: 6px 0 24px; text-align: center;
 }
 #log-target-edit { color: var(--target-color); font-weight: 600; cursor: pointer; text-decoration: underline; }
 #log-target-input {
   font-family: var(--font); font-size: 15px; font-weight: 700; text-align: center;
   border: none; border-bottom: 2px solid var(--green); outline: none; width: 100px; display: none;
-  margin: 4px 0 20px;
+  margin: 4px 0 24px;
 }
-#log-control { min-height: 90px; display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
+#log-control { min-height: 90px; display: flex; align-items: center; justify-content: center; margin-bottom: 26px; }
 
-.log-num-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
+.log-num-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
 .log-step-btn {
-  width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--border); flex-shrink: 0;
+  width: 46px; height: 46px; border-radius: 50%; border: 1.5px solid var(--border); flex-shrink: 0;
   background: white; font-size: 20px; font-weight: 700; color: var(--text); cursor: pointer;
 }
 .log-step-btn:active { background: #f3f4f6; }
 .log-num-mid { display: flex; flex-direction: column; align-items: center; }
 #log-num-input {
   font-family: var(--font); font-size: 32px; font-weight: 800; text-align: center;
-  border: none; outline: none; width: 120px; color: var(--text);
+  border: none; outline: none; width: 130px; color: var(--text);
 }
 #log-num-unit { font-size: 13px; color: var(--muted); font-weight: 600; }
 
@@ -704,14 +690,7 @@ main {
   border: none; outline: none; color: var(--text);
 }
 
-.log-bool-row { display: flex; gap: 10px; width: 100%; }
-.log-bool-btn {
-  flex: 1; padding: 16px; border-radius: 12px; border: 1.5px solid var(--border);
-  background: white; font-size: 16px; font-weight: 700; color: var(--text); cursor: pointer;
-}
-.log-bool-btn.selected { background: var(--green); color: white; border-color: var(--green); }
-
-.log-rating-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; }
+.log-rating-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; width: 100%; }
 .log-rating-btn {
   aspect-ratio: 1 / 1; border-radius: 10px; border: 1.5px solid var(--border);
   background: white; font-size: 15px; font-weight: 700; color: var(--muted); cursor: pointer;
@@ -749,8 +728,9 @@ main {
 #toast.success { background: var(--green); }
 #toast.error { background: #dc2626; }
 
+#log-panel-btns { display: flex; justify-content: center; gap: 12px; margin-top: 6px; }
 .tpbtn {
-  flex: 1; padding: 13px; border-radius: 10px; border: 1px solid var(--border);
+  min-width: 120px; padding: 13px 22px; border-radius: 10px; border: 1px solid var(--border);
   font-family: var(--font); font-size: 15px; font-weight: 700; cursor: pointer;
   background: white;
 }
@@ -760,32 +740,9 @@ main {
 <body>
 
 <div id="header">
-  <button id="adjust-btn" aria-label="Adjust sizing">⚙</button>
   <h1>Habits</h1>
   <div id="date-row">
     <input type="date" id="date-input">
-    <span class="draft-badge" id="draft-badge">Draft saved</span>
-  </div>
-</div>
-
-<!-- Adjust panel — drag these directly on your own phone to fine-tune
-     sizing; no more guessing at pixel math from a screenshot. Values are
-     saved to this phone's localStorage and persist across reloads. -->
-<div id="adjust-sheet">
-  <div id="adjust-panel">
-    <h3>Adjust sizing</h3>
-    <div class="adj-row">
-      <div class="adj-label"><span>Tile size</span><span class="adj-val" id="adj-val-tile"></span></div>
-      <input type="range" id="adj-tile" min="50" max="140" step="1">
-    </div>
-    <div class="adj-row">
-      <div class="adj-label"><span>Tile gap</span><span class="adj-val" id="adj-val-tilegap"></span></div>
-      <input type="range" id="adj-tilegap" min="2" max="20" step="1">
-    </div>
-    <div id="adjust-panel-btns">
-      <button class="tpbtn" id="adjust-reset">Reset to auto-fit</button>
-      <button class="tpbtn confirm" id="adjust-done">Done</button>
-    </div>
   </div>
 </div>
 
@@ -854,7 +811,7 @@ const DEFAULT_TARGETS = {
 const HABITS_META = [
   { key: 'wake-time',     label: 'Wake-up',       emoji: '🌅', type: 'time' },
   { key: 'morning-pages', label: 'Morning pages', emoji: '📝', type: 'number', unit: 'min', step: 5 },
-  { key: 'workout',       label: 'Workout',       emoji: '💪', type: 'boolean' },
+  { key: 'workout',       label: 'Workout',       emoji: '💪', type: 'tristate' },
   { key: 'skincare',      label: 'Skincare',      emoji: '🧴', type: 'combo', fields: [
       { key: 'skincare-am', label: 'AM', type: 'boolean' },
       { key: 'skincare-pm', label: 'PM', type: 'boolean' },
@@ -865,7 +822,7 @@ const HABITS_META = [
       { key: 'reading',    label: 'Reading',    type: 'number', unit: 'min', step: 5 },
       { key: 'audiobooks', label: 'Audiobooks', type: 'number', unit: 'min', step: 5 },
     ] },
-  { key: 'steps',         label: 'Steps',         emoji: '👣', type: 'number', unit: 'steps', step: 100 },
+  { key: 'steps',         label: 'Steps',         emoji: '👣', type: 'number', unit: 'steps', step: 100, noStepper: true },
   { key: 'water',         label: 'Water',         emoji: '💧', type: 'number', unit: 'L', step: 0.25 },
   { key: 'diet',          label: 'Diet',          emoji: '🍽️', type: 'combo', fields: [
       { key: 'calories',     label: 'Calories',     type: 'number', unit: 'kcal', step: 10 },
@@ -916,26 +873,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('log-target-input').addEventListener('blur', confirmEditTarget);
 
   document.getElementById('save-btn').addEventListener('click', saveToSheets);
-
-  document.getElementById('adjust-btn').addEventListener('click', openAdjustPanel);
-  document.getElementById('adjust-sheet').addEventListener('click', e => {
-    if (e.target === document.getElementById('adjust-sheet')) closeAdjustPanel();
-  });
-  document.getElementById('adjust-done').addEventListener('click', () => {
-    saveManualSizing({
-      tileSize: parseInt(document.getElementById('adj-tile').value, 10),
-      tileGap: parseInt(document.getElementById('adj-tilegap').value, 10),
-    });
-    closeAdjustPanel();
-  });
-  document.getElementById('adjust-reset').addEventListener('click', () => {
-    clearManualSizing();
-    sizeGrid();
-    openAdjustPanel();
-  });
-  ['adj-tile', 'adj-tilegap'].forEach(id => {
-    document.getElementById(id).addEventListener('input', liveApplyFromSliders);
-  });
 });
 
 // ── Tiles ──────────────────────────────────────────────
@@ -959,26 +896,7 @@ function renderTiles() {
   updateTileStates();
 }
 
-// ── Manual sizing override ──────────────────────────────
-// Auto-fit math is a best guess at layout it can't actually see rendering
-// on your device. If it's ever off, use the ⚙ Adjust panel to drag it
-// right by hand — those values are saved here and take over completely,
-// skipping the auto calculation below until you hit "Reset to auto-fit".
-const MANUAL_SIZE_KEY = 'habit-logger-manual-sizing';
-
-function loadManualSizing() {
-  try {
-    const raw = localStorage.getItem(MANUAL_SIZE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) { return null; }
-}
-function saveManualSizing(vals) {
-  localStorage.setItem(MANUAL_SIZE_KEY, JSON.stringify(vals));
-}
-function clearManualSizing() {
-  localStorage.removeItem(MANUAL_SIZE_KEY);
-}
-
+// ── Tile sizing ──────────────────────────────────────────
 function applySizing(tileSize, tileGap) {
   const grid = document.getElementById('tile-grid');
   const cols = getGridCols();
@@ -988,12 +906,6 @@ function applySizing(tileSize, tileGap) {
 }
 
 function sizeGrid() {
-  const manual = loadManualSizing();
-  if (manual) {
-    applySizing(manual.tileSize, manual.tileGap);
-    return;
-  }
-
   const header = document.getElementById('header');
   const saveBar = document.getElementById('save-bar');
   const main = document.querySelector('main');
@@ -1020,41 +932,13 @@ function sizeGrid() {
   const availH = totalAvail - SAFETY_MARGIN;
   const sizeByWidth = (availW - tileGap * (cols - 1)) / cols;
   const sizeByHeight = (availH - tileGap * (rows - 1)) / rows;
-  const tileSize = Math.max(30, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
+  // 0.75 = tiles deliberately sized 25% smaller than a tight fit, per Drew's
+  // request — the grid no longer aims to fill every last pixel.
+  const tileSize = Math.max(24, Math.floor(Math.min(sizeByWidth, sizeByHeight) * 0.75));
 
   applySizing(tileSize, tileGap);
 }
 window.sizeGrid = sizeGrid;
-
-// ── Adjust panel ─────────────────────────────────────────
-function currentSizingValues() {
-  const grid = document.getElementById('tile-grid');
-  const gridCs = getComputedStyle(grid);
-  return {
-    tileSize: Math.round(parseFloat(gridCs.getPropertyValue('--tile-size')) || 90),
-    tileGap: Math.round(parseFloat(gridCs.columnGap) || 9),
-  };
-}
-function setAdjSlider(id, val) {
-  document.getElementById('adj-' + id).value = val;
-  document.getElementById('adj-val-' + id).textContent = val + 'px';
-}
-function openAdjustPanel() {
-  const v = currentSizingValues();
-  setAdjSlider('tile', v.tileSize);
-  setAdjSlider('tilegap', v.tileGap);
-  document.getElementById('adjust-sheet').classList.add('open');
-}
-function closeAdjustPanel() {
-  document.getElementById('adjust-sheet').classList.remove('open');
-}
-function liveApplyFromSliders() {
-  const tileSize = parseInt(document.getElementById('adj-tile').value, 10);
-  const tileGap = parseInt(document.getElementById('adj-tilegap').value, 10);
-  applySizing(tileSize, tileGap);
-  document.getElementById('adj-val-tile').textContent = tileSize + 'px';
-  document.getElementById('adj-val-tilegap').textContent = tileGap + 'px';
-}
 
 // Targets only ever show inside the log sheet, not on the tile itself —
 // the tile face is blank until logged, then shows the entered value.
@@ -1066,6 +950,7 @@ function displayValue(h) {
   const v = values[h.key];
   if (v !== undefined && v !== '' && v !== null) {
     if (h.type === 'boolean') return v === 'TRUE' ? 'Done' : 'Not done';
+    if (h.type === 'tristate') return v === 'TRUE' ? 'Done' : v === 'REST' ? 'Rest day' : 'Not done';
     return String(v);
   }
   return '';
@@ -1138,11 +1023,9 @@ function confirmEditTarget() {
 }
 
 // ── Log sheet ──────────────────────────────────────────
-function buildNumberControl(container, currentVal, unit, step, onChange) {
+function buildNumberControl(container, currentVal, unit, step, onChange, noStepper) {
   const row = document.createElement('div');
   row.className = 'combo-num-row';
-  const dec = document.createElement('button');
-  dec.className = 'combo-step-btn'; dec.type = 'button'; dec.textContent = '−';
   const mid = document.createElement('div');
   mid.style.display = 'flex'; mid.style.flexDirection = 'column'; mid.style.alignItems = 'center';
   const input = document.createElement('input');
@@ -1154,6 +1037,21 @@ function buildNumberControl(container, currentVal, unit, step, onChange) {
     unitEl.className = 'combo-num-unit'; unitEl.textContent = unit;
     mid.appendChild(unitEl);
   }
+  input.addEventListener('input', () => onChange(input.value));
+  // Select the existing value on tap so typing a new number (e.g. 1.2, 2.1)
+  // is a clean overwrite instead of having to manually clear it first.
+  input.addEventListener('focus', () => input.select());
+
+  // Steps (and anything else marked noStepper) is free numeric entry only —
+  // a +/- stepper doesn't make sense for typing an exact step count.
+  if (noStepper) {
+    row.appendChild(mid);
+    container.appendChild(row);
+    return;
+  }
+
+  const dec = document.createElement('button');
+  dec.className = 'combo-step-btn'; dec.type = 'button'; dec.textContent = '−';
   const inc = document.createElement('button');
   inc.className = 'combo-step-btn'; inc.type = 'button'; inc.textContent = '+';
   const stepStr = String(step);
@@ -1166,23 +1064,53 @@ function buildNumberControl(container, currentVal, unit, step, onChange) {
   };
   dec.addEventListener('click', () => doStep(-step));
   inc.addEventListener('click', () => doStep(step));
-  input.addEventListener('input', () => onChange(input.value));
   row.appendChild(dec); row.appendChild(mid); row.appendChild(inc);
   container.appendChild(row);
 }
 
+// Simple green/red on-off toggle for plain yes/no fields — replaces the
+// old two-button Done/Not-done row to save space and make it a one-tap flip.
 function buildBoolControl(container, currentVal, onChange) {
   const row = document.createElement('div');
+  row.className = 'combo-toggle-row';
+  const label = document.createElement('span');
+  label.className = 'combo-toggle-label';
+  label.textContent = currentVal === 'TRUE' ? 'Done' : currentVal === 'FALSE' ? 'Not done' : '—';
+  const wrap = document.createElement('label');
+  wrap.className = 'combo-toggle-wrap';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = currentVal === 'TRUE';
+  const track = document.createElement('div');
+  track.className = 'combo-toggle-track';
+  const thumb = document.createElement('div');
+  thumb.className = 'combo-toggle-thumb';
+  wrap.appendChild(input); wrap.appendChild(track); wrap.appendChild(thumb);
+  input.addEventListener('change', () => {
+    label.textContent = input.checked ? 'Done' : 'Not done';
+    onChange(input.checked ? 'TRUE' : 'FALSE');
+  });
+  row.appendChild(label); row.appendChild(wrap);
+  container.appendChild(row);
+}
+
+// Workout: Done / Rest day / Not done — a rest day is a planned day off,
+// distinct from simply not working out, per Drew's 5-workout/2-rest weekly split.
+function buildTristateControl(container, currentVal, onChange) {
+  const row = document.createElement('div');
   row.className = 'combo-bool-row';
-  const yes = document.createElement('button');
-  yes.type = 'button'; yes.className = 'combo-bool-btn' + (currentVal === 'TRUE' ? ' selected' : '');
-  yes.textContent = 'Done';
-  const no = document.createElement('button');
-  no.type = 'button'; no.className = 'combo-bool-btn' + (currentVal === 'FALSE' ? ' selected' : '');
-  no.textContent = 'Not done';
-  yes.addEventListener('click', () => { yes.classList.add('selected'); no.classList.remove('selected'); onChange('TRUE'); });
-  no.addEventListener('click', () => { no.classList.add('selected'); yes.classList.remove('selected'); onChange('FALSE'); });
-  row.appendChild(yes); row.appendChild(no);
+  [['TRUE', 'Done'], ['REST', 'Rest day'], ['FALSE', 'Not done']].forEach(([val, label]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'combo-bool-btn' + (currentVal === val ? ' selected' : '');
+    btn.textContent = label;
+    btn.addEventListener('click', () => {
+      row.querySelectorAll('.combo-bool-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      onChange(val);
+    });
+    row.appendChild(btn);
+  });
   container.appendChild(row);
 }
 
@@ -1226,7 +1154,7 @@ function openLogSheet(key) {
   pendingValue = values[key] ?? '';
 
   if (meta.type === 'number') {
-    buildNumberControl(control, pendingValue, meta.unit, meta.step, (val) => { pendingValue = val; });
+    buildNumberControl(control, pendingValue, meta.unit, meta.step, (val) => { pendingValue = val; }, meta.noStepper);
   } else if (meta.type === 'time') {
     control.innerHTML = '<input type="time" id="log-time-input" step="600">';
     const input = document.getElementById('log-time-input');
@@ -1234,6 +1162,8 @@ function openLogSheet(key) {
     input.addEventListener('input', () => pendingValue = input.value);
   } else if (meta.type === 'boolean') {
     buildBoolControl(control, pendingValue, (val) => { pendingValue = val; });
+  } else if (meta.type === 'tristate') {
+    buildTristateControl(control, pendingValue, (val) => { pendingValue = val; });
   } else if (meta.type === 'rating') {
     const grid = document.createElement('div');
     grid.className = 'log-rating-grid';
@@ -1296,7 +1226,6 @@ function getFormData() {
 
 function saveDraft() {
   localStorage.setItem(DRAFT_KEY, JSON.stringify(getFormData()));
-  document.getElementById('draft-badge').classList.add('show');
 }
 
 function loadDraft() {
@@ -1308,7 +1237,6 @@ function loadDraft() {
     if (d['Date'] && d['Date'] !== today) return;
     values = { ...d };
     delete values['Date'];
-    document.getElementById('draft-badge').classList.add('show');
   } catch(e) {}
 }
 
@@ -1344,7 +1272,6 @@ async function saveToSheets() {
     const json = await res.json();
     if (json.ok) {
       localStorage.removeItem(DRAFT_KEY);
-      document.getElementById('draft-badge').classList.remove('show');
       showToast('Saved ✓', 'success');
       btn.textContent = 'Saved ✓';
       setTimeout(() => { btn.textContent = 'Save to Sheets'; btn.disabled = false; }, 2000);
