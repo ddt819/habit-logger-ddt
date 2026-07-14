@@ -592,10 +592,11 @@ main {
 }
 .tile:active { transform: scale(.96); background: #fafafa; }
 .tile.logged { background: var(--green-light); border-color: var(--green-border); }
-.tile-label { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.2; }
-.tile-value { font-size: 18px; font-weight: 800; color: var(--target-color); word-break: break-word; }
+.tile-label { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.2; }
+.tile-value { font-size: 20px; font-weight: 800; color: var(--target-color); word-break: break-word; }
 .tile.logged .tile-value { color: var(--green); }
-.tile-unit { font-size: 12px; font-weight: 600; color: var(--muted); }
+.tile-value.combo-progress { color: var(--green); font-size: 13px; }
+.tile-unit { font-size: 13px; font-weight: 600; color: var(--muted); }
 .tile-check {
   position: absolute; top: 7px; right: 7px; width: 17px; height: 17px; border-radius: 50%;
   background: var(--green); color: white; font-size: 10px; font-weight: 800;
@@ -603,12 +604,12 @@ main {
 }
 .tile.logged .tile-check { display: flex; }
 
-.tile-emoji { font-size: 15px; line-height: 1; }
+.tile-emoji { font-size: 17px; line-height: 1; }
 
 /* Combo fields inside the log sheet — several sub-fields shown together */
-.combo-field { width: 100%; margin-bottom: 20px; }
+.combo-field { width: 100%; margin-bottom: 26px; }
 .combo-field:last-child { margin-bottom: 0; }
-.combo-field-label { font-size: 13px; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 10px; }
+.combo-field-label { font-size: 13px; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 12px; }
 
 /* Simple on/off toggle — green when done, red when not, used for every
    plain yes/no field instead of two separate Done/Not-done buttons. */
@@ -633,7 +634,13 @@ main {
   flex: 1; padding: 14px 8px; border-radius: 10px; border: 1.5px solid var(--border);
   background: white; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer;
 }
-.combo-bool-btn.selected { background: var(--green); color: white; border-color: var(--green); }
+.combo-bool-btn.selected-green { background: var(--green); color: white; border-color: var(--green); }
+.combo-bool-btn.selected-blue { background: #4a90d9; color: white; border-color: #4a90d9; }
+
+/* Skincare's AM/PM side by side — short enough to fit comfortably in a row */
+.combo-field-row { display: flex; gap: 16px; width: 100%; margin-bottom: 20px; }
+.combo-field-row:last-child { margin-bottom: 0; }
+.combo-field-row .combo-field { flex: 1; margin-bottom: 0; }
 
 .combo-num-row { display: flex; align-items: center; justify-content: center; gap: 16px; }
 .combo-step-btn {
@@ -656,27 +663,27 @@ main {
 #log-sheet.open { display: flex; }
 #log-panel {
   background: white; border-radius: 14px 14px 0 0;
-  padding: 10px 22px calc(24px + var(--safe-bottom));
+  padding: 12px 26px calc(30px + var(--safe-bottom));
   width: 100%; max-width: 480px;
 }
 #log-grabber {
   width: 36px; height: 5px; border-radius: 3px; background: #d1d5db;
-  margin: 0 auto 18px;
+  margin: 0 auto 20px;
 }
-#log-panel h3 { font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 4px; }
+#log-panel h3 { font-size: 19px; font-weight: 800; text-align: center; margin-bottom: 6px; }
 #log-target-row {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  font-size: 13px; color: var(--muted); margin: 6px 0 24px; text-align: center;
+  font-size: 13px; color: var(--muted); margin: 6px 0 28px; text-align: center;
 }
 #log-target-edit { color: var(--target-color); font-weight: 600; cursor: pointer; text-decoration: underline; }
 #log-target-input {
   font-family: var(--font); font-size: 15px; font-weight: 700; text-align: center;
   border: none; border-bottom: 2px solid var(--green); outline: none; width: 100px; display: none;
-  margin: 4px 0 24px;
+  margin: 4px 0 28px;
 }
 #log-control {
   min-height: 90px; display: flex; flex-direction: column;
-  align-items: stretch; justify-content: center; margin-bottom: 26px;
+  align-items: stretch; justify-content: center; margin-bottom: 30px;
 }
 
 .log-num-row { display: flex; align-items: center; justify-content: center; gap: 20px; }
@@ -824,27 +831,27 @@ const HABITS_META = [
   { key: 'wake-time',     label: 'Wake-up',       emoji: '🌅', type: 'time' },
   { key: 'morning-pages', label: 'Morning pages', emoji: '📝', type: 'number', unit: 'min', step: 5 },
   { key: 'workout',       label: 'Workout',       emoji: '💪', type: 'tristate' },
-  { key: 'skincare',      label: 'Skincare',      emoji: '🧴', type: 'combo', fields: [
-      { key: 'skincare-am', label: 'AM', type: 'boolean' },
-      { key: 'skincare-pm', label: 'PM', type: 'boolean' },
+  { key: 'skincare',      label: 'Skincare',      emoji: '🧴', type: 'combo', layout: 'row', fields: [
+      { key: 'skincare-am', label: 'AM', short: 'AM', type: 'boolean' },
+      { key: 'skincare-pm', label: 'PM', short: 'PM', type: 'boolean' },
     ] },
   { key: 'writing',       label: 'Writing',       emoji: '✍️', type: 'number', unit: 'min', step: 5 },
   { key: 'lyrics',        label: 'Song lyrics',   emoji: '🎤', type: 'number', unit: 'songs', step: 1 },
   { key: 'books',         label: 'Books',         emoji: '📚', type: 'combo', fields: [
-      { key: 'reading',    label: 'Reading',    type: 'number', unit: 'min', step: 5 },
-      { key: 'audiobooks', label: 'Audiobooks', type: 'number', unit: 'min', step: 5 },
+      { key: 'reading',    label: 'Reading',    short: 'R', type: 'number', unit: 'min', step: 5 },
+      { key: 'audiobooks', label: 'Audiobooks', short: 'A', type: 'number', unit: 'min', step: 5 },
     ] },
   { key: 'steps',         label: 'Steps',         emoji: '👣', type: 'number', unit: 'steps', step: 100, noStepper: true },
   { key: 'water',         label: 'Water',         emoji: '💧', type: 'number', unit: 'L', step: 0.25 },
   { key: 'diet',          label: 'Diet',          emoji: '🍽️', type: 'combo', fields: [
-      { key: 'calories',     label: 'Calories',     type: 'number', unit: 'kcal', step: 10 },
-      { key: 'supplements',  label: 'Supplements',  type: 'boolean' },
+      { key: 'calories',     label: 'Calories',     short: 'Cal',  type: 'number', unit: 'kcal', step: 10, noStepper: true },
+      { key: 'supplements',  label: 'Supplements',  short: 'Supp', type: 'boolean' },
     ] },
   { key: 'ebay-listings', label: 'eBay listings', emoji: '📦', type: 'number', unit: '', step: 1 },
   { key: 'dog',           label: 'Dog',           emoji: '🐶', type: 'combo', fields: [
-      { key: 'dog-walk-1',  label: 'Walk 1',  type: 'number', unit: 'min', step: 5 },
-      { key: 'dog-walk-2',  label: 'Walk 2',  type: 'number', unit: 'min', step: 5 },
-      { key: 'dog-training', label: 'Training', type: 'number', unit: 'min', step: 5 },
+      { key: 'dog-walk-1',  label: 'Walk 1',  short: 'W1', type: 'number', unit: 'min', step: 5 },
+      { key: 'dog-walk-2',  label: 'Walk 2',  short: 'W2', type: 'number', unit: 'min', step: 5 },
+      { key: 'dog-training', label: 'Training', short: 'Tr', type: 'number', unit: 'min', step: 5 },
     ] },
   { key: 'bedtime',       label: 'Bedtime',       emoji: '🌙', type: 'time' },
   { key: 'day-rating',    label: 'Day rating',    emoji: '⭐', type: 'rating' },
@@ -944,10 +951,10 @@ function sizeGrid() {
   const availH = totalAvail - SAFETY_MARGIN;
   const sizeByWidth = (availW - tileGap * (cols - 1)) / cols;
   const sizeByHeight = (availH - tileGap * (rows - 1)) / rows;
-  // 0.9 = tiles deliberately sized 10% smaller than a tight fit, per Drew's
-  // request — the grid no longer aims to fill every last pixel (25% was too
-  // aggressive, 10% is the right amount of breathing room).
-  const tileSize = Math.max(24, Math.floor(Math.min(sizeByWidth, sizeByHeight) * 0.9));
+  // Was 0.9 (10% smaller than tight fit); Drew asked for 15% bigger than
+  // that, i.e. 0.9*1.15 ≈ 1.035 — capped at 1.0 (a full tight fit) since
+  // going past that would overflow the screen and force scrolling.
+  const tileSize = Math.max(24, Math.floor(Math.min(sizeByWidth, sizeByHeight) * Math.min(1, 0.9 * 1.15)));
 
   applySizing(tileSize, tileGap);
 }
@@ -958,8 +965,21 @@ window.sizeGrid = sizeGrid;
 // Combo tiles (Skincare, Books, Diet, Dog) never show a value summary on
 // the tile face, just the checkmark once every sub-field is filled — same
 // "targets/values only show inside the sheet" convention as everything else.
+// Combo tiles show a short growing summary of whichever sub-fields are
+// already logged (e.g. "AM" then "AM · PM") so progress is visible at a
+// glance, same idea as Wake-up showing its time or Morning pages its number.
 function displayValue(h) {
-  if (h.type === 'combo') return '';
+  if (h.type === 'combo') {
+    const parts = h.fields
+      .map(f => {
+        const v = values[f.key];
+        if (v === undefined || v === '' || v === null) return null;
+        if (f.type === 'boolean') return v === 'TRUE' ? (f.short || f.label) : null;
+        return (f.short || f.label) + ' ' + v;
+      })
+      .filter(Boolean);
+    return parts.join(' · ');
+  }
   const v = values[h.key];
   if (v !== undefined && v !== '' && v !== null) {
     if (h.type === 'boolean') return v === 'TRUE' ? 'Done' : 'Not done';
@@ -986,11 +1006,15 @@ function updateTileStates() {
     const meta = TILE_HABITS.find(h => h.key === key);
     tile.classList.toggle('logged', isLogged(meta));
     const value = displayValue(meta);
+    // Combo tiles turn their value text green as soon as any sub-field is
+    // logged, not just once every sub-field is (that's what the checkmark
+    // badge/full tile colour is for) — lets progress show incrementally.
+    const valueClass = 'tile-value' + (meta.type === 'combo' && value ? ' combo-progress' : '');
     tile.innerHTML =
       '<div class="tile-check">✓</div>' +
       '<div class="tile-label">' + meta.label + '</div>' +
       '<div class="tile-emoji">' + meta.emoji + '</div>' +
-      (value ? '<div><div class="tile-value">' + value + '</div>' +
+      (value ? '<div><div class="' + valueClass + '">' + value + '</div>' +
         (meta.unit ? '<div class="tile-unit">' + meta.unit + '</div>' : '') + '</div>' : '');
   });
 }
@@ -1113,17 +1137,20 @@ function buildBoolControl(container, currentVal, onChange) {
 
 // Workout: Done / Rest day / Not done — a rest day is a planned day off,
 // distinct from simply not working out, per Drew's 5-workout/2-rest weekly split.
+// Workout: just Done (green) or Rest day (blue) — no explicit "Not done"
+// button. Absence of either by day's end already means skipped, same as
+// every other habit that was never tapped; no need for a third option.
 function buildTristateControl(container, currentVal, onChange) {
   const row = document.createElement('div');
   row.className = 'combo-bool-row';
-  [['TRUE', 'Done'], ['REST', 'Rest day'], ['FALSE', 'Not done']].forEach(([val, label]) => {
+  [['TRUE', 'Done', 'selected-green'], ['REST', 'Rest day', 'selected-blue']].forEach(([val, label, cls]) => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'combo-bool-btn' + (currentVal === val ? ' selected' : '');
+    btn.className = 'combo-bool-btn' + (currentVal === val ? ' ' + cls : '');
     btn.textContent = label;
     btn.addEventListener('click', () => {
-      row.querySelectorAll('.combo-bool-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
+      row.querySelectorAll('.combo-bool-btn').forEach(b => b.classList.remove('selected-green', 'selected-blue'));
+      btn.classList.add(cls);
       onChange(val);
     });
     row.appendChild(btn);
@@ -1142,6 +1169,13 @@ function openLogSheet(key) {
     // No single target row — each sub-field shows its own target inline instead.
     document.getElementById('log-target-row').style.display = 'none';
     pendingValue = {};
+
+    // Fields with only a couple of characters each (Skincare's AM/PM) fit
+    // comfortably side by side; longer or numeric fields stay stacked.
+    const rowMode = meta.layout === 'row';
+    const host = rowMode ? document.createElement('div') : control;
+    if (rowMode) { host.className = 'combo-field-row'; control.appendChild(host); }
+
     meta.fields.forEach(f => {
       pendingValue[f.key] = values[f.key] ?? '';
       const wrap = document.createElement('div');
@@ -1154,9 +1188,9 @@ function openLogSheet(key) {
       if (f.type === 'boolean') {
         buildBoolControl(wrap, pendingValue[f.key], (val) => { pendingValue[f.key] = val; });
       } else {
-        buildNumberControl(wrap, pendingValue[f.key], f.unit, f.step, (val) => { pendingValue[f.key] = val; });
+        buildNumberControl(wrap, pendingValue[f.key], f.unit, f.step, (val) => { pendingValue[f.key] = val; }, f.noStepper);
       }
-      control.appendChild(wrap);
+      host.appendChild(wrap);
     });
     document.getElementById('log-sheet').classList.add('open');
     return;
