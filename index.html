@@ -118,16 +118,21 @@ const HABITS = [
   ['Writing (min)',  'Creative', 'metric',  '60',    'min',   'higher'],
   ['Reading (min)',  'Creative', 'metric',  '90',    'min',   'higher'],
   ['Audiobooks (min)','Creative','metric',  '30',    'min',   'higher'],
+  ['Song lyrics',    'Creative', 'metric',  '2',     'songs', 'higher'],
   ['eBay listings',  'Work',     'metric',  '40',    'count', 'higher'],
   ['Skincare AM',    'Daily',    'boolean', 'daily', 'done',  'higher'],
   ['Skincare PM',    'Daily',    'boolean', 'daily', 'done',  'higher'],
+  ['Dog Walk 1 (min)',   'Dog',  'metric',  '60',    'min',   'higher'],
+  ['Dog Walk 2 (min)',   'Dog',  'metric',  '60',    'min',   'higher'],
+  ['Dog Training (min)', 'Dog',  'metric',  '15',    'min',   'higher'],
   ['Day rating',     'Daily',    'metric',  '7',     '/10',   'higher'],
 ];
 
 // Maps the phone app's field keys -> pretty Log column labels above.
+// 'sleep-hours' deliberately absent — Sleep is now a spreadsheet formula
+// (previous night's Bedtime -> today's Wake-up), not app-logged.
 const KEY_MAP = {
   'wake-time':     'Wake-up',
-  'sleep-hours':   'Sleep (hrs)',
   'steps':         'Steps',
   'workout':       'Workout',
   'calories':      'Calories (kcal)',
@@ -136,11 +141,15 @@ const KEY_MAP = {
   'bedtime':       'Bedtime',
   'morning-pages': 'Morning pages (min)',
   'writing':       'Writing (min)',
+  'lyrics':        'Song lyrics',
   'reading':       'Reading (min)',
   'audiobooks':    'Audiobooks (min)',
   'ebay-listings': 'eBay listings',
   'skincare-am':   'Skincare AM',
   'skincare-pm':   'Skincare PM',
+  'dog-walk-1':    'Dog Walk 1 (min)',
+  'dog-walk-2':    'Dog Walk 2 (min)',
+  'dog-training':  'Dog Training (min)',
   'day-rating':    'Day rating',
 };
 
@@ -628,30 +637,29 @@ main {
 }
 .tile.logged .tile-check { display: flex; }
 
-/* Day rating — a row of circles instead of a tile, direct tap to select */
-#rating-strip {
-  display: flex; justify-content: center; gap: var(--rating-gap-size, 6px); margin-top: 8px; flex-shrink: 0;
+.tile-emoji { font-size: 15px; line-height: 1; }
+
+/* Combo fields inside the log sheet — several sub-fields shown together */
+.combo-field { width: 100%; margin-bottom: 14px; }
+.combo-field:last-child { margin-bottom: 0; }
+.combo-field-label { font-size: 12px; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 6px; }
+.combo-bool-row { display: flex; gap: 8px; width: 100%; }
+.combo-bool-btn {
+  flex: 1; padding: 12px; border-radius: 10px; border: 1.5px solid var(--border);
+  background: white; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer;
 }
-.rating-circle {
-  width: var(--rating-size, 30px); height: var(--rating-size, 30px); border-radius: 50%;
-  border: 1.5px solid var(--border);
-  background: var(--card); font-size: 12px; font-weight: 700; color: var(--muted);
-  display: flex; align-items: center; justify-content: center; cursor: pointer;
-  flex-shrink: 0; transition: all .12s; -webkit-user-select: none; user-select: none;
+.combo-bool-btn.selected { background: var(--green); color: white; border-color: var(--green); }
+.combo-num-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.combo-step-btn {
+  width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--border); flex-shrink: 0;
+  background: white; font-size: 17px; font-weight: 700; color: var(--text); cursor: pointer;
 }
-.rating-circle:active { transform: scale(.9); }
-.rating-circle.selected { background: var(--green); color: white; border-color: var(--green); }
-.rating-circle.target-mark { color: var(--target-color); }
-#rating-target {
-  text-align: center; font-size: 11.5px; color: var(--muted); margin-top: 6px;
-  cursor: pointer; flex-shrink: 0;
+.combo-step-btn:active { background: #f3f4f6; }
+.combo-num-input {
+  font-family: var(--font); font-size: 22px; font-weight: 800; text-align: center;
+  border: none; outline: none; width: 80px; color: var(--text);
 }
-#rating-target .edit-hint { text-decoration: underline; }
-#rating-target input {
-  font-family: var(--font); font-size: 13px; font-weight: 700; text-align: center;
-  border: none; border-bottom: 2px solid var(--green); outline: none; width: 50px;
-  background: transparent; color: var(--text);
-}
+.combo-num-unit { font-size: 12px; color: var(--muted); font-weight: 600; }
 
 /* Log sheet — tap a tile to open, enter a value, Save locks it */
 #log-sheet {
@@ -702,6 +710,14 @@ main {
   background: white; font-size: 16px; font-weight: 700; color: var(--text); cursor: pointer;
 }
 .log-bool-btn.selected { background: var(--green); color: white; border-color: var(--green); }
+
+.log-rating-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; }
+.log-rating-btn {
+  aspect-ratio: 1 / 1; border-radius: 10px; border: 1.5px solid var(--border);
+  background: white; font-size: 15px; font-weight: 700; color: var(--muted); cursor: pointer;
+}
+.log-rating-btn.selected { background: var(--green); color: white; border-color: var(--green); }
+.log-rating-btn.target-mark { color: var(--target-color); }
 
 /* Save bar */
 #save-bar {
@@ -766,14 +782,6 @@ main {
       <div class="adj-label"><span>Tile gap</span><span class="adj-val" id="adj-val-tilegap"></span></div>
       <input type="range" id="adj-tilegap" min="2" max="20" step="1">
     </div>
-    <div class="adj-row">
-      <div class="adj-label"><span>Rating circle size</span><span class="adj-val" id="adj-val-rating"></span></div>
-      <input type="range" id="adj-rating" min="18" max="44" step="1">
-    </div>
-    <div class="adj-row">
-      <div class="adj-label"><span>Rating gap</span><span class="adj-val" id="adj-val-ratinggap"></span></div>
-      <input type="range" id="adj-ratinggap" min="2" max="16" step="1">
-    </div>
     <div id="adjust-panel-btns">
       <button class="tpbtn" id="adjust-reset">Reset to auto-fit</button>
       <button class="tpbtn confirm" id="adjust-done">Done</button>
@@ -783,8 +791,6 @@ main {
 
 <main>
   <div class="tile-grid" id="tile-grid"></div>
-  <div id="rating-strip"></div>
-  <div id="rating-target"></div>
 </main>
 
 <div id="save-bar">
@@ -818,15 +824,18 @@ const TARGET_KEY = 'habit-logger-targets';
 
 const DEFAULT_TARGETS = {
   'wake-time':     '04:30',
-  'sleep-hours':   '6.5',
   'steps':         '10000',
   'calories':      '1550',
   'water':         '5',
   'morning-pages': '30',
   'writing':       '60',
+  'lyrics':        '2',
   'reading':       '90',
   'audiobooks':    '30',
   'ebay-listings': '40',
+  'dog-walk-1':    '60',
+  'dog-walk-2':    '60',
+  'dog-training':  '15',
   'bedtime':       '21:30',
   'day-rating':    '7',
 };
@@ -837,23 +846,39 @@ const DEFAULT_TARGETS = {
 // the grid, and cumulative/uncertain-until-later habits (steps, water,
 // calories, supplements, eBay listings, audiobooks) sit in the back half
 // since you only know where they'll land as the day unfolds.
+// "combo" tiles group several already-separate Sheet columns behind one
+// tile — tap it and every sub-field shows together in the same sheet,
+// per Drew's call to see them all at once rather than picking one first.
+// Sleep is deliberately absent — it's now a spreadsheet formula computed
+// from the previous night's bedtime + that day's wake-up, not app-logged.
 const HABITS_META = [
-  { key: 'wake-time',      label: 'Wake-up',        type: 'time',    section: 'health' },
-  { key: 'sleep-hours',    label: 'Sleep',          type: 'number',  unit: 'hrs',  step: 0.25, section: 'health' },
-  { key: 'morning-pages',  label: 'Morning pages',  type: 'number',  unit: 'min', step: 5, section: 'creative' },
-  { key: 'workout',        label: 'Workout',        type: 'boolean', section: 'health' },
-  { key: 'skincare-am',    label: 'Skincare AM',    type: 'boolean', section: 'daily' },
-  { key: 'writing',        label: 'Writing',        type: 'number',  unit: 'min', step: 5, section: 'creative' },
-  { key: 'reading',        label: 'Reading',        type: 'number',  unit: 'min', step: 5, section: 'creative' },
-  { key: 'steps',          label: 'Steps',          type: 'number',  unit: 'steps', step: 100, section: 'health' },
-  { key: 'water',          label: 'Water',          type: 'number',  unit: 'L',    step: 0.25, section: 'health' },
-  { key: 'calories',       label: 'Calories',       type: 'number',  unit: 'kcal', step: 10, section: 'health' },
-  { key: 'supplements',    label: 'Supplements',    type: 'boolean', section: 'health' },
-  { key: 'ebay-listings',  label: 'eBay listings',  type: 'number',  unit: '',    step: 1, section: 'daily' },
-  { key: 'audiobooks',     label: 'Audiobooks',     type: 'number',  unit: 'min', step: 5, section: 'creative' },
-  { key: 'skincare-pm',    label: 'Skincare PM',    type: 'boolean', section: 'daily' },
-  { key: 'bedtime',        label: 'Bedtime',        type: 'time',    section: 'health' },
-  { key: 'day-rating',     label: 'Day rating',     type: 'rating',  section: 'daily' },
+  { key: 'wake-time',     label: 'Wake-up',       emoji: '🌅', type: 'time' },
+  { key: 'morning-pages', label: 'Morning pages', emoji: '📝', type: 'number', unit: 'min', step: 5 },
+  { key: 'workout',       label: 'Workout',       emoji: '💪', type: 'boolean' },
+  { key: 'skincare',      label: 'Skincare',      emoji: '🧴', type: 'combo', fields: [
+      { key: 'skincare-am', label: 'AM', type: 'boolean' },
+      { key: 'skincare-pm', label: 'PM', type: 'boolean' },
+    ] },
+  { key: 'writing',       label: 'Writing',       emoji: '✍️', type: 'number', unit: 'min', step: 5 },
+  { key: 'lyrics',        label: 'Song lyrics',   emoji: '🎤', type: 'number', unit: 'songs', step: 1 },
+  { key: 'books',         label: 'Books',         emoji: '📚', type: 'combo', fields: [
+      { key: 'reading',    label: 'Reading',    type: 'number', unit: 'min', step: 5 },
+      { key: 'audiobooks', label: 'Audiobooks', type: 'number', unit: 'min', step: 5 },
+    ] },
+  { key: 'steps',         label: 'Steps',         emoji: '👣', type: 'number', unit: 'steps', step: 100 },
+  { key: 'water',         label: 'Water',         emoji: '💧', type: 'number', unit: 'L', step: 0.25 },
+  { key: 'diet',          label: 'Diet',          emoji: '🍽️', type: 'combo', fields: [
+      { key: 'calories',     label: 'Calories',     type: 'number', unit: 'kcal', step: 10 },
+      { key: 'supplements',  label: 'Supplements',  type: 'boolean' },
+    ] },
+  { key: 'ebay-listings', label: 'eBay listings', emoji: '📦', type: 'number', unit: '', step: 1 },
+  { key: 'dog',           label: 'Dog',           emoji: '🐶', type: 'combo', fields: [
+      { key: 'dog-walk-1',  label: 'Walk 1',  type: 'number', unit: 'min', step: 5 },
+      { key: 'dog-walk-2',  label: 'Walk 2',  type: 'number', unit: 'min', step: 5 },
+      { key: 'dog-training', label: 'Training', type: 'number', unit: 'min', step: 5 },
+    ] },
+  { key: 'bedtime',       label: 'Bedtime',       emoji: '🌙', type: 'time' },
+  { key: 'day-rating',    label: 'Day rating',    emoji: '⭐', type: 'rating' },
 ];
 
 // Local calendar date (phone's own timezone) as YYYY-MM-DD. Deliberately not
@@ -900,8 +925,6 @@ document.addEventListener('DOMContentLoaded', () => {
     saveManualSizing({
       tileSize: parseInt(document.getElementById('adj-tile').value, 10),
       tileGap: parseInt(document.getElementById('adj-tilegap').value, 10),
-      ratingSize: parseInt(document.getElementById('adj-rating').value, 10),
-      ratingGap: parseInt(document.getElementById('adj-ratinggap').value, 10),
     });
     closeAdjustPanel();
   });
@@ -910,7 +933,7 @@ document.addEventListener('DOMContentLoaded', () => {
     sizeGrid();
     openAdjustPanel();
   });
-  ['adj-tile', 'adj-tilegap', 'adj-rating', 'adj-ratinggap'].forEach(id => {
+  ['adj-tile', 'adj-tilegap'].forEach(id => {
     document.getElementById(id).addEventListener('input', liveApplyFromSliders);
   });
 });
@@ -921,7 +944,7 @@ function getGridCols() {
   return v || 3;
 }
 
-const TILE_HABITS = HABITS_META.filter(h => h.type !== 'rating');
+const TILE_HABITS = HABITS_META;
 
 function renderTiles() {
   const grid = document.getElementById('tile-grid');
@@ -933,14 +956,9 @@ function renderTiles() {
     tile.addEventListener('click', () => openLogSheet(h.key));
     grid.appendChild(tile);
   });
-  renderRatingStrip();
   updateTileStates();
 }
 
-// Computes the largest square tile size that makes the whole grid fit the
-// screen exactly (width AND height) on whatever device this loads on, so
-// there is never a scrollbar and never leftover dead space. Reserves
-// whatever space the rating strip actually takes up below the grid first.
 // ── Manual sizing override ──────────────────────────────
 // Auto-fit math is a best guess at layout it can't actually see rendering
 // on your device. If it's ever off, use the ⚙ Adjust panel to drag it
@@ -961,21 +979,18 @@ function clearManualSizing() {
   localStorage.removeItem(MANUAL_SIZE_KEY);
 }
 
-function applySizing(tileSize, tileGap, ratingSize, ratingGap) {
+function applySizing(tileSize, tileGap) {
   const grid = document.getElementById('tile-grid');
-  const strip = document.getElementById('rating-strip');
   const cols = getGridCols();
   grid.style.setProperty('--tile-gap-size', tileGap + 'px');
   grid.style.setProperty('--tile-size', tileSize + 'px');
   grid.style.gridTemplateColumns = 'repeat(' + cols + ', ' + tileSize + 'px)';
-  strip.style.setProperty('--rating-gap-size', ratingGap + 'px');
-  strip.style.setProperty('--rating-size', ratingSize + 'px');
 }
 
 function sizeGrid() {
   const manual = loadManualSizing();
   if (manual) {
-    applySizing(manual.tileSize, manual.tileGap, manual.ratingSize, manual.ratingGap);
+    applySizing(manual.tileSize, manual.tileGap);
     return;
   }
 
@@ -983,8 +998,6 @@ function sizeGrid() {
   const saveBar = document.getElementById('save-bar');
   const main = document.querySelector('main');
   const grid = document.getElementById('tile-grid');
-  const strip = document.getElementById('rating-strip');
-  const targetLabel = document.getElementById('rating-target');
 
   // Reserve exactly the save bar's real rendered height (a static 90px
   // guess didn't match reality and let main's box run taller than the
@@ -998,38 +1011,28 @@ function sizeGrid() {
   const mainCs = getComputedStyle(main);
   const availW = main.clientWidth - parseFloat(mainCs.paddingLeft) - parseFloat(mainCs.paddingRight);
 
-  const ratingGap = parseFloat(getComputedStyle(strip).gap) || 6;
-  const ratingSize = Math.max(22, Math.floor((availW - ratingGap * 9) / 10));
-
   const padY = parseFloat(mainCs.paddingTop) + parseFloat(mainCs.paddingBottom);
   const totalAvail = saveBar.getBoundingClientRect().top - header.getBoundingClientRect().bottom - padY;
 
-  const stripH = ratingSize + parseFloat(getComputedStyle(strip).marginTop);
-  const targetLabelH = targetLabel.getBoundingClientRect().height + parseFloat(getComputedStyle(targetLabel).marginTop);
-  // Extra safety margin so tiles land a touch smaller than a razor-tight
-  // fit — guarantees clear breathing room above the save bar instead of
-  // sitting right on the edge of it.
-  const SAFETY_MARGIN = 18;
-  const availH = totalAvail - stripH - targetLabelH - SAFETY_MARGIN;
+  // Small safety margin so tiles land a touch smaller than a razor-tight
+  // fit — guarantees clear breathing room above the save bar.
+  const SAFETY_MARGIN = 14;
+  const availH = totalAvail - SAFETY_MARGIN;
   const sizeByWidth = (availW - tileGap * (cols - 1)) / cols;
   const sizeByHeight = (availH - tileGap * (rows - 1)) / rows;
   const tileSize = Math.max(30, Math.floor(Math.min(sizeByWidth, sizeByHeight)));
 
-  applySizing(tileSize, tileGap, ratingSize, ratingGap);
+  applySizing(tileSize, tileGap);
 }
 window.sizeGrid = sizeGrid;
 
 // ── Adjust panel ─────────────────────────────────────────
 function currentSizingValues() {
   const grid = document.getElementById('tile-grid');
-  const strip = document.getElementById('rating-strip');
   const gridCs = getComputedStyle(grid);
-  const stripCs = getComputedStyle(strip);
   return {
     tileSize: Math.round(parseFloat(gridCs.getPropertyValue('--tile-size')) || 90),
     tileGap: Math.round(parseFloat(gridCs.columnGap) || 9),
-    ratingSize: Math.round(parseFloat(stripCs.getPropertyValue('--rating-size')) || 30),
-    ratingGap: Math.round(parseFloat(stripCs.gap) || 6),
   };
 }
 function setAdjSlider(id, val) {
@@ -1040,8 +1043,6 @@ function openAdjustPanel() {
   const v = currentSizingValues();
   setAdjSlider('tile', v.tileSize);
   setAdjSlider('tilegap', v.tileGap);
-  setAdjSlider('rating', v.ratingSize);
-  setAdjSlider('ratinggap', v.ratingGap);
   document.getElementById('adjust-sheet').classList.add('open');
 }
 function closeAdjustPanel() {
@@ -1050,18 +1051,18 @@ function closeAdjustPanel() {
 function liveApplyFromSliders() {
   const tileSize = parseInt(document.getElementById('adj-tile').value, 10);
   const tileGap = parseInt(document.getElementById('adj-tilegap').value, 10);
-  const ratingSize = parseInt(document.getElementById('adj-rating').value, 10);
-  const ratingGap = parseInt(document.getElementById('adj-ratinggap').value, 10);
-  applySizing(tileSize, tileGap, ratingSize, ratingGap);
+  applySizing(tileSize, tileGap);
   document.getElementById('adj-val-tile').textContent = tileSize + 'px';
   document.getElementById('adj-val-tilegap').textContent = tileGap + 'px';
-  document.getElementById('adj-val-rating').textContent = ratingSize + 'px';
-  document.getElementById('adj-val-ratinggap').textContent = ratingGap + 'px';
 }
 
 // Targets only ever show inside the log sheet, not on the tile itself —
 // the tile face is blank until logged, then shows the entered value.
+// Combo tiles (Skincare, Books, Diet, Dog) never show a value summary on
+// the tile face, just the checkmark once every sub-field is filled — same
+// "targets/values only show inside the sheet" convention as everything else.
 function displayValue(h) {
+  if (h.type === 'combo') return '';
   const v = values[h.key];
   if (v !== undefined && v !== '' && v !== null) {
     if (h.type === 'boolean') return v === 'TRUE' ? 'Done' : 'Not done';
@@ -1070,77 +1071,29 @@ function displayValue(h) {
   return '';
 }
 
+function isLogged(h) {
+  if (h.type === 'combo') {
+    return h.fields.every(f => {
+      const v = values[f.key];
+      return v !== undefined && v !== '' && v !== null;
+    });
+  }
+  const v = values[h.key];
+  return v !== undefined && v !== '' && v !== null;
+}
+
 function updateTileStates() {
   document.querySelectorAll('.tile').forEach(tile => {
     const key = tile.dataset.key;
     const meta = TILE_HABITS.find(h => h.key === key);
-    const v = values[key];
-    const logged = v !== undefined && v !== '' && v !== null;
-    tile.classList.toggle('logged', logged);
+    tile.classList.toggle('logged', isLogged(meta));
     const value = displayValue(meta);
     tile.innerHTML =
       '<div class="tile-check">✓</div>' +
       '<div class="tile-label">' + meta.label + '</div>' +
+      '<div class="tile-emoji">' + meta.emoji + '</div>' +
       (value ? '<div><div class="tile-value">' + value + '</div>' +
         (meta.unit ? '<div class="tile-unit">' + meta.unit + '</div>' : '') + '</div>' : '');
-  });
-  updateRatingStrip();
-}
-
-// ── Day rating strip ────────────────────────────────────
-function renderRatingStrip() {
-  const strip = document.getElementById('rating-strip');
-  strip.innerHTML = '';
-  for (let i = 1; i <= 10; i++) {
-    const btn = document.createElement('div');
-    btn.className = 'rating-circle';
-    btn.textContent = i;
-    btn.dataset.val = i;
-    btn.addEventListener('click', () => selectDayRating(i));
-    strip.appendChild(btn);
-  }
-  document.getElementById('rating-target').addEventListener('click', startEditRatingTarget);
-  renderRatingTargetLabel();
-}
-
-function updateRatingStrip() {
-  const val = values['day-rating'];
-  const target = targets['day-rating'];
-  document.querySelectorAll('.rating-circle').forEach(btn => {
-    const v = btn.dataset.val;
-    const selected = String(val) === v;
-    btn.classList.toggle('selected', selected);
-    btn.classList.toggle('target-mark', !selected && String(target) === v);
-  });
-}
-
-function selectDayRating(i) {
-  values['day-rating'] = i;
-  saveDraft();
-  saveField('day-rating', i);
-  updateRatingStrip();
-}
-
-function renderRatingTargetLabel() {
-  const el = document.getElementById('rating-target');
-  const t = targets['day-rating'];
-  el.innerHTML = 'Target: ' + (t || '—') + ' <span class="edit-hint">Edit</span>';
-}
-
-function startEditRatingTarget(e) {
-  e.stopPropagation();
-  const el = document.getElementById('rating-target');
-  if (document.getElementById('rating-target-input')) return; // already editing
-  el.innerHTML = '<input type="text" inputmode="decimal" id="rating-target-input">';
-  const input = document.getElementById('rating-target-input');
-  input.value = targets['day-rating'] || '';
-  input.focus();
-  input.addEventListener('blur', () => {
-    const val = input.value.trim();
-    if (val) { targets['day-rating'] = val; saveTargets(); }
-    renderRatingTargetLabel();
-    updateRatingStrip();
-    sizeGrid();
   });
 }
 
@@ -1185,62 +1138,119 @@ function confirmEditTarget() {
 }
 
 // ── Log sheet ──────────────────────────────────────────
+function buildNumberControl(container, currentVal, unit, step, onChange) {
+  const row = document.createElement('div');
+  row.className = 'combo-num-row';
+  const dec = document.createElement('button');
+  dec.className = 'combo-step-btn'; dec.type = 'button'; dec.textContent = '−';
+  const mid = document.createElement('div');
+  mid.style.display = 'flex'; mid.style.flexDirection = 'column'; mid.style.alignItems = 'center';
+  const input = document.createElement('input');
+  input.type = 'text'; input.inputMode = 'decimal'; input.className = 'combo-num-input';
+  input.placeholder = '—'; input.value = currentVal;
+  mid.appendChild(input);
+  if (unit) {
+    const unitEl = document.createElement('div');
+    unitEl.className = 'combo-num-unit'; unitEl.textContent = unit;
+    mid.appendChild(unitEl);
+  }
+  const inc = document.createElement('button');
+  inc.className = 'combo-step-btn'; inc.type = 'button'; inc.textContent = '+';
+  const stepStr = String(step);
+  const dotIdx = stepStr.indexOf('.');
+  const decimals = dotIdx === -1 ? 0 : stepStr.length - dotIdx - 1;
+  const doStep = (delta) => {
+    const cur = parseFloat(input.value || '0') || 0;
+    input.value = (cur + delta).toFixed(decimals);
+    onChange(input.value);
+  };
+  dec.addEventListener('click', () => doStep(-step));
+  inc.addEventListener('click', () => doStep(step));
+  input.addEventListener('input', () => onChange(input.value));
+  row.appendChild(dec); row.appendChild(mid); row.appendChild(inc);
+  container.appendChild(row);
+}
+
+function buildBoolControl(container, currentVal, onChange) {
+  const row = document.createElement('div');
+  row.className = 'combo-bool-row';
+  const yes = document.createElement('button');
+  yes.type = 'button'; yes.className = 'combo-bool-btn' + (currentVal === 'TRUE' ? ' selected' : '');
+  yes.textContent = 'Done';
+  const no = document.createElement('button');
+  no.type = 'button'; no.className = 'combo-bool-btn' + (currentVal === 'FALSE' ? ' selected' : '');
+  no.textContent = 'Not done';
+  yes.addEventListener('click', () => { yes.classList.add('selected'); no.classList.remove('selected'); onChange('TRUE'); });
+  no.addEventListener('click', () => { no.classList.add('selected'); yes.classList.remove('selected'); onChange('FALSE'); });
+  row.appendChild(yes); row.appendChild(no);
+  container.appendChild(row);
+}
+
 function openLogSheet(key) {
   editingKey = key;
   const meta = HABITS_META.find(h => h.key === key);
-  pendingValue = values[key] ?? '';
+  const control = document.getElementById('log-control');
+  control.innerHTML = '';
+  document.getElementById('log-panel-title').textContent = meta.emoji + ' ' + meta.label;
 
-  document.getElementById('log-panel-title').textContent = meta.label;
+  if (meta.type === 'combo') {
+    // No single target row — each sub-field shows its own target inline instead.
+    document.getElementById('log-target-row').style.display = 'none';
+    pendingValue = {};
+    meta.fields.forEach(f => {
+      pendingValue[f.key] = values[f.key] ?? '';
+      const wrap = document.createElement('div');
+      wrap.className = 'combo-field';
+      const t = targets[f.key];
+      const labelEl = document.createElement('div');
+      labelEl.className = 'combo-field-label';
+      labelEl.textContent = f.label + (t ? ' · target ' + t + (f.unit ? ' ' + f.unit : '') : '');
+      wrap.appendChild(labelEl);
+      if (f.type === 'boolean') {
+        buildBoolControl(wrap, pendingValue[f.key], (val) => { pendingValue[f.key] = val; });
+      } else {
+        buildNumberControl(wrap, pendingValue[f.key], f.unit, f.step, (val) => { pendingValue[f.key] = val; });
+      }
+      control.appendChild(wrap);
+    });
+    document.getElementById('log-sheet').classList.add('open');
+    return;
+  }
+
+  document.getElementById('log-target-row').style.display = '';
   document.getElementById('log-target-input').style.display = 'none';
   document.getElementById('log-target-text').style.display = '';
   document.getElementById('log-target-edit').style.display = '';
   renderTargetText(meta);
 
-  const control = document.getElementById('log-control');
-  control.innerHTML = '';
+  pendingValue = values[key] ?? '';
 
   if (meta.type === 'number') {
-    control.innerHTML =
-      '<div class="log-num-row">' +
-        '<button class="log-step-btn" id="log-dec">−</button>' +
-        '<div class="log-num-mid"><input type="text" inputmode="decimal" id="log-num-input" placeholder="—">' +
-        (meta.unit ? '<div id="log-num-unit">' + meta.unit + '</div>' : '') + '</div>' +
-        '<button class="log-step-btn" id="log-inc">+</button>' +
-      '</div>';
-    const input = document.getElementById('log-num-input');
-    input.value = pendingValue;
-    const stepStr = String(meta.step);
-    const dotIdx = stepStr.indexOf('.');
-    const decimals = dotIdx === -1 ? 0 : stepStr.length - dotIdx - 1;
-    const step = (delta) => {
-      const cur = parseFloat(input.value || '0') || 0;
-      input.value = (cur + delta).toFixed(decimals);
-      pendingValue = input.value;
-    };
-    document.getElementById('log-dec').addEventListener('click', () => step(-meta.step));
-    document.getElementById('log-inc').addEventListener('click', () => step(meta.step));
-    input.addEventListener('input', () => pendingValue = input.value);
+    buildNumberControl(control, pendingValue, meta.unit, meta.step, (val) => { pendingValue = val; });
   } else if (meta.type === 'time') {
     control.innerHTML = '<input type="time" id="log-time-input" step="600">';
     const input = document.getElementById('log-time-input');
     input.value = pendingValue;
     input.addEventListener('input', () => pendingValue = input.value);
   } else if (meta.type === 'boolean') {
-    control.innerHTML =
-      '<div class="log-bool-row">' +
-        '<button class="log-bool-btn" data-val="TRUE" id="log-bool-yes">Done</button>' +
-        '<button class="log-bool-btn" data-val="FALSE" id="log-bool-no">Not done</button>' +
-      '</div>';
-    if (pendingValue) {
-      document.getElementById(pendingValue === 'TRUE' ? 'log-bool-yes' : 'log-bool-no').classList.add('selected');
-    }
-    control.querySelectorAll('.log-bool-btn').forEach(btn => {
+    buildBoolControl(control, pendingValue, (val) => { pendingValue = val; });
+  } else if (meta.type === 'rating') {
+    const grid = document.createElement('div');
+    grid.className = 'log-rating-grid';
+    for (let i = 1; i <= 10; i++) {
+      const btn = document.createElement('button');
+      const isTarget = String(i) === targets['day-rating'];
+      const isSelected = String(pendingValue) === String(i);
+      btn.className = 'log-rating-btn' + (isTarget && !isSelected ? ' target-mark' : '') + (isSelected ? ' selected' : '');
+      btn.textContent = i;
       btn.addEventListener('click', () => {
-        control.querySelectorAll('.log-bool-btn').forEach(b => b.classList.remove('selected'));
+        grid.querySelectorAll('.log-rating-btn').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
-        pendingValue = btn.dataset.val;
+        pendingValue = i;
       });
-    });
+      grid.appendChild(btn);
+    }
+    control.appendChild(grid);
   }
 
   document.getElementById('log-sheet').classList.add('open');
@@ -1253,6 +1263,23 @@ function closeLogSheet() {
 
 function saveLogValue() {
   if (!editingKey) return;
+  const meta = HABITS_META.find(h => h.key === editingKey);
+
+  if (meta.type === 'combo') {
+    let anySaved = false;
+    meta.fields.forEach(f => {
+      const val = pendingValue[f.key];
+      if (val === '' || val === undefined || val === null) return;
+      values[f.key] = val;
+      saveField(f.key, val);
+      anySaved = true;
+    });
+    if (anySaved) saveDraft();
+    updateTileStates();
+    closeLogSheet();
+    return;
+  }
+
   const val = pendingValue;
   if (val === '' || val === undefined || val === null) { closeLogSheet(); return; }
   values[editingKey] = val;
